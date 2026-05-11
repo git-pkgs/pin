@@ -15,6 +15,7 @@ import (
 	"github.com/git-pkgs/pin/cdn"
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
+	"github.com/git-pkgs/pin/sniff"
 	"github.com/git-pkgs/pin/source/npm"
 )
 
@@ -152,12 +153,17 @@ func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e 
 
 	for _, f := range resolved.Files {
 		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
+		assetType := lock.ClassifyType(f.Path)
+		format := e.Format
+		if format == "" && assetType == lock.TypeScript {
+			format = sniff.Format(f.Content)
+		}
 		assets = append(assets, lock.Asset{
 			Name:             resolved.Name,
 			Version:          resolved.Version,
 			PURL:             resolved.PURL,
-			Type:             string(lock.ClassifyType(f.Path)),
-			Format:           e.Format,
+			Type:             string(assetType),
+			Format:           format,
 			Path:             f.Path,
 			Out:              out,
 			URL:              cdn.NPMFileURL(cdn.JSDelivr, resolved.Name, resolved.Version, f.Path),
