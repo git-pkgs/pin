@@ -71,5 +71,6 @@ func newSyncCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry", "", "npm registry base URL (default: registry.npmjs.org)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit the resolved lockfile as JSON instead of a summary (use with --dry-run for managers' resolve)")
 	cmd.Flags().BoolVar(&opts.StrictProvenance, "strict-provenance", false, "fail if any npm entry resolves to a version with no attestation")
+	cmd.Flags().BoolVar(&opts.RequirePublisherMatchesRepository, "require-publisher-matches-repository", false, "fail if an attestation's build workflow lives on a different repository than the package's declared repository.url (catches leaked-token attacks)")
 	return cmd
 }

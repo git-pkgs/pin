@@ -55,6 +55,15 @@ type SyncOptions struct {
 	// StrictProvenance fails sync when an npm entry resolves to a version
 	// that has no SLSA Provenance attestation recorded by the registry.
 	StrictProvenance bool
+
+	// RequirePublisherMatchesRepository fails sync when an attestation's
+	// build workflow lives on a different repository than the package's
+	// declared repository.url. This is the key consumer-side check
+	// against leaked-token attacks: an attacker with a stolen publish
+	// token can produce a technically valid attestation from their own
+	// CI, but the source_repository field will not match the legitimate
+	// package's repo.
+	RequirePublisherMatchesRepository bool
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
@@ -125,6 +134,11 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 
 	if opts.StrictProvenance {
 		if err := assertProvenance(next); err != nil {
+			return nil, err
+		}
+	}
+	if opts.RequirePublisherMatchesRepository {
+		if err := assertPublisherMatchesRepository(next); err != nil {
 			return nil, err
 		}
 	}
@@ -403,6 +417,49 @@ func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]
 		}
 	}
 	return nil
+}
+
+// assertPublisherMatchesRepository requires that, for every asset with
+// a recorded attestation, the attestation's source repository matches
+// the package's declared repository.url. This is the consumer-side check
+// against a leaked publish token: an attacker can produce a syntactically
+// valid attestation from their own CI, but the source_repository field
+// will not match the legitimate package's repo.
+func assertPublisherMatchesRepository(l *lock.Lock) error {
+	seen := map[string]bool{}
+	var mismatches []string
+	for _, a := range l.Assets {
+		if seen[a.Name] {
+			continue
+		}
+		seen[a.Name] = true
+		if a.Attestation == nil {
+			continue
+		}
+		want := normaliseRepoURL(a.SourceRepository)
+		got := normaliseRepoURL(a.Attestation.SourceRepository)
+		if want == "" || got == "" {
+			continue
+		}
+		if want != got {
+			mismatches = append(mismatches, fmt.Sprintf("%s@%s: attestation built from %s but package.json says %s", a.Name, a.Version, got, want))
+		}
+	}
+	if len(mismatches) > 0 {
+		return fmt.Errorf("--require-publisher-matches-repository: %s", strings.Join(mismatches, "; "))
+	}
+	return nil
+}
+
+// normaliseRepoURL strips a leading https:// (or http://), trailing .git,
+// and any trailing slash, so two URLs that differ only in scheme or
+// suffix compare equal.
+func normaliseRepoURL(u string) string {
+	u = strings.TrimSuffix(u, "/")
+	u = strings.TrimSuffix(u, ".git")
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	return strings.ToLower(u)
 }
 
 func assertProvenance(l *lock.Lock) error {
