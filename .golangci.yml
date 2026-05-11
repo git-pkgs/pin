@@ -23,3 +23,7 @@ linters:
           - goconst
           - dupl
           - mnd
+          - unparam
+      - path: internal/cli/
+        linters:
+          - errcheck

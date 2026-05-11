@@ -1,7 +1,7 @@
 .PHONY: build test lint cover clean
 
 build:
-	go build -o bin/pin .
+	go build -o bin/pin ./cmd/pin
 
 test:
 	go test -race ./...

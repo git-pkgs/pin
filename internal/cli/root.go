@@ -16,5 +16,7 @@ func Root() *cobra.Command {
 		SilenceErrors: true,
 	}
 
+	root.AddCommand(newSyncCmd())
+
 	return root
 }
