@@ -71,6 +71,45 @@ func isExactVersion(s string) bool {
 type packageDoc struct {
 	DistTags map[string]string          `json:"dist-tags"`
 	Versions map[string]json.RawMessage `json:"versions"`
+	Time     map[string]string          `json:"time"`
+}
+
+type PackageStatus struct {
+	Latest      string
+	LatestTime  string
+	LastPublish string
+	Deprecated  string
+	Yanked      bool
+	License     string
+}
+
+// Status reports registry-side health signals for a locked package version.
+func (s *Source) Status(ctx context.Context, name, lockedVersion string) (*PackageStatus, error) {
+	doc, err := s.fetchPackageDoc(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	st := &PackageStatus{
+		Latest:      doc.DistTags["latest"],
+		LastPublish: doc.Time["modified"],
+	}
+	if st.Latest != "" {
+		st.LatestTime = doc.Time[st.Latest]
+	}
+
+	raw, ok := doc.Versions[lockedVersion]
+	if !ok {
+		st.Yanked = true
+		return st, nil
+	}
+	var v struct {
+		Deprecated string          `json:"deprecated"`
+		License    json.RawMessage `json:"license"`
+	}
+	_ = json.Unmarshal(raw, &v)
+	st.Deprecated = v.Deprecated
+	st.License = parseLicense(v.License)
+	return st, nil
 }
 
 // ResolveVersion turns a manifest constraint into an exact published version.
