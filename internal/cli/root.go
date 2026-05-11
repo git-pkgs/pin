@@ -17,6 +17,7 @@ func Root() *cobra.Command {
 	}
 
 	root.AddCommand(newSyncCmd())
+	root.AddCommand(newVerifyCmd())
 
 	return root
 }

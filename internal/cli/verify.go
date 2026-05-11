@@ -1,0 +1,60 @@
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+
+	pin "github.com/git-pkgs/pin"
+	"github.com/spf13/cobra"
+)
+
+const exitVerifyFailed = 4
+
+func newVerifyCmd() *cobra.Command {
+	var opts pin.VerifyOptions
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "verify",
+		Short: "Re-hash files on disk against the lockfile",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			res, err := pin.Verify(opts)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if jsonOut {
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				_ = enc.Encode(res)
+			} else {
+				fmt.Fprintln(out, res.Summary())
+				for _, m := range res.Missing {
+					fmt.Fprintf(out, "  missing: %s\n", m)
+				}
+				for _, d := range res.Drifted {
+					fmt.Fprintf(out, "  drifted: %s\n    expected %s\n    actual   %s\n", d.Out, d.Expected, d.Actual)
+				}
+				for _, e := range res.Extra {
+					fmt.Fprintf(out, "  extra:   %s\n", e)
+				}
+			}
+			if res.Failed() || (opts.Strict && len(res.Extra) > 0) {
+				return &exitError{code: exitVerifyFailed, msg: "verify failed"}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&opts.Dir, "dir", "C", ".", "project directory")
+	cmd.Flags().StringVar(&opts.Lock, "lock", pin.DefaultLock, "lockfile path")
+	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "treat extra files as failures")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+	return cmd
+}
+
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e *exitError) Error() string { return e.msg }
+func (e *exitError) ExitCode() int { return e.code }
