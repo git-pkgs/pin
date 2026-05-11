@@ -210,7 +210,7 @@ func resolveURLEntry(ctx context.Context, src *rawurl.Source, m *manifest.Manife
 func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	version := lockedVersion
 	if !npm.IsSticky(lockedVersion, e.Version) {
-		v, err := src.ResolveVersion(ctx, e.Name, e.Version)
+		v, err := src.ResolveVersion(ctx, e.Name, e.Version, m.EffectiveMinReleaseAge(e))
 		if err != nil {
 			return nil, nil, err
 		}

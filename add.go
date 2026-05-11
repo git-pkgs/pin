@@ -42,7 +42,7 @@ func Add(ctx context.Context, spec string, files []string, opts AddOptions) (*Ad
 
 	src := npm.New(npm.Options{RegistryURL: opts.RegistryURL})
 
-	resolved, err := src.ResolveVersion(ctx, name, defaultIfEmpty(constraint, "latest"))
+	resolved, err := src.ResolveVersion(ctx, name, defaultIfEmpty(constraint, "latest"), 0)
 	if err != nil {
 		return nil, err
 	}

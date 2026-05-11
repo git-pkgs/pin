@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/git-pkgs/vers"
 )
@@ -113,26 +114,40 @@ func (s *Source) Status(ctx context.Context, name, lockedVersion string) (*Packa
 }
 
 // ResolveVersion turns a manifest constraint into an exact published version.
-func (s *Source) ResolveVersion(ctx context.Context, name, constraint string) (string, error) {
+// Exact pins bypass the cooldown (the user named the version explicitly).
+// Ranges fall back to the next-highest satisfying version outside the
+// cooldown window. Dist-tags fail with a clear error when the tag resolves
+// to a version that's still inside the window.
+func (s *Source) ResolveVersion(ctx context.Context, name, constraint string, cooldown time.Duration) (string, error) {
 	switch Classify(constraint) {
 	case KindExact:
 		return constraint, nil
 	case KindDistTag:
-		doc, err := s.fetchPackageDoc(ctx, name)
-		if err != nil {
-			return "", err
-		}
-		if v, ok := doc.DistTags[constraint]; ok {
-			return v, nil
-		}
-		return "", fmt.Errorf("%s: dist-tag %q not found", name, constraint)
+		return s.resolveDistTag(ctx, name, constraint, cooldown)
 	case KindRange:
-		return s.resolveRange(ctx, name, constraint)
+		return s.resolveRange(ctx, name, constraint, cooldown)
 	}
 	return "", fmt.Errorf("%s: unable to classify constraint %q", name, constraint)
 }
 
-func (s *Source) resolveRange(ctx context.Context, name, constraint string) (string, error) {
+func (s *Source) resolveDistTag(ctx context.Context, name, tag string, cooldown time.Duration) (string, error) {
+	doc, err := s.fetchPackageDoc(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	v, ok := doc.DistTags[tag]
+	if !ok {
+		return "", fmt.Errorf("%s: dist-tag %q not found", name, tag)
+	}
+	if cooldown > 0 {
+		if age, ok := versionAge(doc, v); ok && age < cooldown {
+			return "", fmt.Errorf("%s: dist-tag %q resolves to %s published %s ago, inside the %s cooldown; pin an exact version or shorten min_release_age", name, tag, v, age.Truncate(time.Minute), cooldown)
+		}
+	}
+	return v, nil
+}
+
+func (s *Source) resolveRange(ctx context.Context, name, constraint string, cooldown time.Duration) (string, error) {
 	doc, err := s.fetchPackageDoc(ctx, name)
 	if err != nil {
 		return "", err
@@ -147,15 +162,33 @@ func (s *Source) resolveRange(ctx context.Context, name, constraint string) (str
 		if !includePrerelease && isPrerelease(v) {
 			continue
 		}
-		if r.Contains(v) {
-			candidates = append(candidates, v)
+		if !r.Contains(v) {
+			continue
 		}
+		if cooldown > 0 {
+			if age, ok := versionAge(doc, v); ok && age < cooldown {
+				continue
+			}
+		}
+		candidates = append(candidates, v)
 	}
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("%s: no published version satisfies %q", name, constraint)
+		return "", fmt.Errorf("%s: no published version satisfies %q (after %s cooldown)", name, constraint, cooldown)
 	}
 	slices.SortFunc(candidates, vers.Compare)
 	return candidates[len(candidates)-1], nil
+}
+
+func versionAge(doc *packageDoc, version string) (time.Duration, bool) {
+	t, ok := doc.Time[version]
+	if !ok {
+		return 0, false
+	}
+	parsed, err := time.Parse(time.RFC3339, t)
+	if err != nil {
+		return 0, false
+	}
+	return time.Since(parsed), true
 }
 
 // IsSticky reports whether a locked version still satisfies a manifest

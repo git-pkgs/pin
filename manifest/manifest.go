@@ -5,6 +5,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/git-pkgs/purl"
 	"gopkg.in/yaml.v3"
@@ -18,19 +19,58 @@ const (
 )
 
 type Manifest struct {
-	Out    string  `yaml:"out"`
-	Layout Layout  `yaml:"layout"`
-	Assets []Entry `yaml:"assets"`
+	Out           string    `yaml:"out"`
+	Layout        Layout    `yaml:"layout"`
+	MinReleaseAge *Duration `yaml:"min_release_age"`
+	Assets        []Entry   `yaml:"assets"`
 }
 
 type Entry struct {
-	Name      string   `yaml:"name"`
-	Version   string   `yaml:"version"`
-	RawSource string   `yaml:"source"`
-	Files     []string `yaml:"files"`
-	Format    string   `yaml:"format"`
+	Name          string    `yaml:"name"`
+	Version       string    `yaml:"version"`
+	RawSource     string    `yaml:"source"`
+	Files         []string  `yaml:"files"`
+	Format        string    `yaml:"format"`
+	MinReleaseAge *Duration `yaml:"min_release_age"`
 
 	src Source
+}
+
+// DefaultMinReleaseAge is the default cooldown window applied when the
+// manifest doesn't specify one. Most malicious npm versions are caught
+// within 24–48 hours; defaulting to 48h blocks the majority of
+// fresh-publish supply-chain attacks at the cost of a bounded lag on
+// bleeding-edge releases. Opt out per entry or globally with
+// `min_release_age: 0`.
+const DefaultMinReleaseAge = 48 * time.Hour
+
+// EffectiveMinReleaseAge returns the cooldown to apply to an entry:
+// per-entry override if set, manifest default if set, otherwise the
+// global default.
+func (m *Manifest) EffectiveMinReleaseAge(e *Entry) time.Duration {
+	if e.MinReleaseAge != nil {
+		return time.Duration(*e.MinReleaseAge)
+	}
+	if m.MinReleaseAge != nil {
+		return time.Duration(*m.MinReleaseAge)
+	}
+	return DefaultMinReleaseAge
+}
+
+// Duration is a time.Duration that unmarshals from a YAML string like
+// "48h", "30m", or "0".
+type Duration time.Duration
+
+func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
+	if node.Value == "" {
+		return nil
+	}
+	parsed, err := time.ParseDuration(node.Value)
+	if err != nil {
+		return fmt.Errorf("min_release_age %q: %w", node.Value, err)
+	}
+	*d = Duration(parsed)
+	return nil
 }
 
 func Read(r io.Reader) (*Manifest, error) {
@@ -86,11 +126,12 @@ const (
 )
 
 var allowedEntryKeys = map[string]bool{
-	keyName:    true,
-	keyVersion: true,
-	keySource:  true,
-	keyFiles:   true,
-	keyFormat:  true,
+	keyName:           true,
+	keyVersion:        true,
+	keySource:         true,
+	keyFiles:          true,
+	keyFormat:         true,
+	"min_release_age": true,
 }
 
 // strictAssets walks each asset's mapping node and rejects keys not in
