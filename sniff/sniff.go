@@ -28,8 +28,11 @@ var (
 	reDefineAMD    = regexp.MustCompile(`\bdefine\.amd\b`)
 	reSystem       = regexp.MustCompile(`\bSystem\.register\s*\(`)
 	reAMDDefine    = regexp.MustCompile(`\bdefine\s*\(\s*(\[|['"])`)
-	reESMExport    = regexp.MustCompile(`\bexport\s+(default\b|const\b|let\b|var\b|function\b|class\b|async\b|\{|\*)`)
-	reESMImport    = regexp.MustCompile(`\bimport\s+(\{|\*|['"]|[A-Za-z_$])`)
+	reESMExportKW  = regexp.MustCompile(`\bexport\s+(default\b|const\b|let\b|var\b|function\b|class\b|async\b)`)
+	reESMExportBr  = regexp.MustCompile(`\bexport\s*[\{\*]`)
+	reESMImportBr  = regexp.MustCompile(`\bimport\s*[\{\*]`)
+	reESMImportBnd = regexp.MustCompile(`\bimport\s+[A-Za-z_$]`)
+	reESMImportStr = regexp.MustCompile(`\bimport\s*['"]`)
 	reCJSModule    = regexp.MustCompile(`\bmodule\.exports\b|\bexports\.[A-Za-z_$]|\bexports\s*\[`)
 	reCJSDefine    = regexp.MustCompile(`Object\.defineProperty\s*\(\s*exports\s*,`)
 	reIIFEWrapped  = regexp.MustCompile(`^[\s;]*[!~+\-]?\s*\(?\s*(function\s*\(|\(\s*\)\s*=>)`)
@@ -58,7 +61,8 @@ func Format(src []byte) string {
 	if reAMDDefine.Match(masked) && !bytes.Contains(masked, []byte("module.exports")) {
 		return AMD
 	}
-	if reESMExport.Match(masked) || reESMImport.Match(masked) {
+	if reESMExportKW.Match(masked) || reESMExportBr.Match(masked) ||
+		reESMImportBr.Match(masked) || reESMImportBnd.Match(masked) || reESMImportStr.Match(masked) {
 		return ESM
 	}
 	if reCJSModule.Match(masked) || reCJSDefine.Match(masked) {

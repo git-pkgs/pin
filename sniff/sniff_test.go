@@ -44,6 +44,16 @@ func TestFormat(t *testing.T) {
 			ESM,
 		},
 		{
+			"esm-minified-export-brace",
+			`var x=1;export{x as foo};`,
+			ESM,
+		},
+		{
+			"esm-minified-import-brace",
+			`import{a,b}from'./m';a();`,
+			ESM,
+		},
+		{
 			"cjs",
 			`const x = require('./x'); module.exports = {x};`,
 			CJS,
