@@ -135,6 +135,15 @@ assets:
 	if !bytes.Equal(lock1, lock2) {
 		t.Error("second sync produced different lockfile bytes")
 	}
+
+	info1, _ := os.Stat(filepath.Join(dir, DefaultLock))
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	info2, _ := os.Stat(filepath.Join(dir, DefaultLock))
+	if !info1.ModTime().Equal(info2.ModTime()) {
+		t.Error("third sync touched lockfile mtime despite identical bytes")
+	}
 	if len(first.Changes.Added) != 1 || len(second.Changes.Added) != 0 {
 		t.Errorf("first.Added = %d, second.Added = %d", len(first.Changes.Added), len(second.Changes.Added))
 	}
@@ -198,6 +207,50 @@ assets:
 	if _, err := os.Stat(filepath.Join(dir, "v/demo/a.js")); err != nil {
 		t.Error("a.js should still exist")
 	}
+}
+
+func TestSyncPrunesEmptyDirs(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+`)
+	if err := os.RemoveAll(filepath.Join(dir, "v/demo")); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(filepath.Join(dir, "v/gone/nested"), 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "pin.lock"), mustEncodeLock(t, &lock.Lock{
+		OutDir: "v",
+		Assets: []lock.Asset{{Name: "gone", Version: "1.0.0", PURL: "pkg:npm/gone@1.0.0", Path: "nested/y.js", Out: "gone/nested/y.js"}},
+	}), 0o644)
+
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "v/gone")); !os.IsNotExist(err) {
+		t.Error("empty 'gone' directory should have been pruned")
+	}
+}
+
+func mustEncodeLock(t *testing.T, l *lock.Lock) []byte {
+	t.Helper()
+	b, err := EncodeLock(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func TestSyncDryRun(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 
 func newSyncCmd() *cobra.Command {
 	var opts pin.SyncOptions
+	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Resolve manifest, fetch assets, write lockfile",
@@ -18,6 +19,14 @@ func newSyncCmd() *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			if jsonOut {
+				encoded, err := pin.EncodeLock(res.Lock)
+				if err != nil {
+					return err
+				}
+				_, _ = out.Write(encoded)
+				return nil
+			}
 			fmt.Fprintf(out, "synced %d assets (%d added, %d updated, %d removed, %d unchanged)\n",
 				len(res.Lock.Assets),
 				len(res.Changes.Added), len(res.Changes.Updated),
@@ -40,5 +49,6 @@ func newSyncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "resolve and report, but write nothing")
 	cmd.Flags().BoolVar(&opts.Frozen, "frozen", false, "fail if the lockfile would change (CI mode)")
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry", "", "npm registry base URL (default: registry.npmjs.org)")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit the resolved lockfile as JSON instead of a summary (use with --dry-run for managers' resolve)")
 	return cmd
 }

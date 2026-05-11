@@ -3,6 +3,7 @@
 package pin
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -206,15 +207,34 @@ func writeFiles(dir, outDir string, files []fileContent) ([]string, error) {
 }
 
 func removeOrphans(dir, outDir string, orphans []lock.Asset) ([]string, error) {
+	root := filepath.Join(dir, outDir)
 	var removed []string
+	parents := map[string]bool{}
 	for _, a := range orphans {
-		p := filepath.Join(dir, outDir, filepath.FromSlash(a.Out))
+		p := filepath.Join(root, filepath.FromSlash(a.Out))
 		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return removed, fmt.Errorf("remove orphan %s: %w", a.Out, err)
 		}
 		removed = append(removed, a.Out)
+		parents[filepath.Dir(p)] = true
+	}
+	for parent := range parents {
+		pruneEmpty(parent, root)
 	}
 	return removed, nil
+}
+
+func pruneEmpty(dir, stop string) {
+	for dir != stop && dir != "." && dir != string(filepath.Separator) {
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) > 0 {
+			return
+		}
+		if err := os.Remove(dir); err != nil {
+			return
+		}
+		dir = filepath.Dir(dir)
+	}
 }
 
 // checkFrozen fails fast, before any network call, if the manifest and
@@ -277,17 +297,27 @@ func readLock(path string) (*lock.Lock, error) {
 }
 
 func writeLock(path string, l *lock.Lock) error {
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
+	encoded, err := EncodeLock(l)
 	if err != nil {
 		return err
 	}
-	if err := lock.Write(f, l, ToolName, ToolVersion); err != nil {
-		_ = f.Close()
-		return err
+	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, encoded) {
+		return nil
 	}
-	if err := f.Close(); err != nil {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, encoded, filePerm); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// EncodeLock returns the lockfile bytes for l using the current tool
+// name and version. Useful for --dry-run --json and for byte-comparison
+// against an existing lockfile.
+func EncodeLock(l *lock.Lock) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := lock.Write(&buf, l, ToolName, ToolVersion); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
