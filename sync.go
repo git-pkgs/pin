@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
@@ -35,6 +36,17 @@ type SyncOptions struct {
 	DryRun      bool
 	Frozen      bool
 	RegistryURL string
+
+	// Update names whose lock-is-sticky check is bypassed: those entries
+	// re-resolve against the registry even if the locked version still
+	// satisfies the manifest constraint.
+	Update []string
+	// UpdateAll bypasses lock-is-sticky for every entry.
+	UpdateAll bool
+}
+
+func (o *SyncOptions) forceResolve(name string) bool {
+	return o.UpdateAll || slices.Contains(o.Update, name)
 }
 
 type SyncResult struct {
@@ -75,7 +87,11 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	var written []string
 
 	for _, entry := range m.Assets {
-		assets, files, rerr := resolveEntry(ctx, npmSrc, m, &entry, prevVersions[entry.Name])
+		locked := prevVersions[entry.Name]
+		if opts.forceResolve(entry.Name) {
+			locked = ""
+		}
+		assets, files, rerr := resolveEntry(ctx, npmSrc, m, &entry, locked)
 		if rerr != nil {
 			return nil, rerr
 		}
