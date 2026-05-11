@@ -25,6 +25,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newListCmd())
 	root.AddCommand(newPathCmd())
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newSBOMCmd())
 
 	return root
 }
