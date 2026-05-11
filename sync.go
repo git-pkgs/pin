@@ -65,6 +65,12 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	npmSrc := npm.New(npm.Options{RegistryURL: opts.RegistryURL})
 	prevVersions := lockedVersionsByName(prev)
 
+	if opts.Frozen {
+		if err := checkFrozen(m, prev, prevVersions); err != nil {
+			return nil, err
+		}
+	}
+
 	next := &lock.Lock{OutDir: m.Out}
 	var written []string
 
@@ -84,11 +90,6 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	}
 
 	changes := lock.Diff(prev, next)
-
-	if opts.Frozen && (len(changes.Added)+len(changes.Updated)+len(changes.Removed) > 0) {
-		return nil, fmt.Errorf("--frozen: lockfile would change (%d added, %d updated, %d removed)",
-			len(changes.Added), len(changes.Updated), len(changes.Removed))
-	}
 
 	var removed []string
 	if !opts.DryRun {
@@ -190,6 +191,33 @@ func removeOrphans(dir, outDir string, orphans []lock.Asset) ([]string, error) {
 		removed = append(removed, a.Out)
 	}
 	return removed, nil
+}
+
+// checkFrozen fails fast, before any network call, if the manifest and
+// lockfile are inconsistent. Under --frozen the lockfile is the contract:
+// every manifest entry must already be locked at a satisfying version, and
+// every locked asset must still be claimed by a manifest entry.
+func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) error {
+	if prev == nil {
+		return fmt.Errorf("--frozen: no lockfile present; run sync without --frozen first")
+	}
+	manifestNames := map[string]bool{}
+	for _, e := range m.Assets {
+		manifestNames[e.Name] = true
+		locked := prevVersions[e.Name]
+		if locked == "" {
+			return fmt.Errorf("--frozen: %s is in the manifest but not the lockfile", e.Name)
+		}
+		if !npm.IsSticky(locked, e.Version) {
+			return fmt.Errorf("--frozen: %s is locked at %s which no longer satisfies manifest constraint %q", e.Name, locked, e.Version)
+		}
+	}
+	for _, a := range prev.Assets {
+		if !manifestNames[a.Name] {
+			return fmt.Errorf("--frozen: %s is in the lockfile but not the manifest", a.Name)
+		}
+	}
+	return nil
 }
 
 func lockedVersionsByName(l *lock.Lock) map[string]string {
