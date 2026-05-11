@@ -2,10 +2,25 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	pin "github.com/git-pkgs/pin"
 	"github.com/spf13/cobra"
 )
+
+// ciEnvVars is the set of environment variable names that indicate the
+// process is running under a CI system. When one of these is set and
+// --frozen isn't passed, pin sync prints a one-line nudge.
+var ciEnvVars = []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "JENKINS_URL"}
+
+func detectCI() string {
+	for _, k := range ciEnvVars {
+		if os.Getenv(k) != "" {
+			return k
+		}
+	}
+	return ""
+}
 
 func newSyncCmd() *cobra.Command {
 	var opts pin.SyncOptions
@@ -14,6 +29,11 @@ func newSyncCmd() *cobra.Command {
 		Use:   "sync",
 		Short: "Resolve manifest, fetch assets, write lockfile",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !opts.Frozen {
+				if ci := detectCI(); ci != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "note: %s is set; consider --frozen so a stale lockfile fails the build instead of being silently re-resolved\n", ci)
+				}
+			}
 			res, err := pin.Sync(cmd.Context(), opts)
 			if err != nil {
 				return err

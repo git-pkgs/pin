@@ -19,27 +19,32 @@ type OutdatedOptions struct {
 }
 
 type OutdatedReport struct {
-	Name        string
-	Locked      string
-	Latest      string
-	Behind      bool
-	AgeDays     int
-	LastPublish string
-	Deprecated  string
-	Yanked      bool
+	Name                string
+	Locked              string
+	Latest              string
+	Behind              bool
+	AgeDays             int
+	LastPublish         string
+	Deprecated          string
+	Yanked              bool
+	ProvenanceDowngrade bool // locked had provenance, latest doesn't
+	ProvenanceUpgrade   bool // locked didn't, latest does
 }
 
 const (
-	SeverityOK         = "ok"
-	SeverityBehind     = "behind"
-	SeverityDeprecated = "deprecated"
-	SeverityYanked     = "yanked"
+	SeverityOK                  = "ok"
+	SeverityBehind              = "behind"
+	SeverityDeprecated          = "deprecated"
+	SeverityYanked              = "yanked"
+	SeverityProvenanceDowngrade = "provenance-downgrade"
 )
 
 func (r *OutdatedReport) Severity() string {
 	switch {
 	case r.Yanked:
 		return SeverityYanked
+	case r.ProvenanceDowngrade:
+		return SeverityProvenanceDowngrade
 	case r.Deprecated != "":
 		return SeverityDeprecated
 	case r.Behind:
@@ -84,14 +89,16 @@ func Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, erro
 			return nil, fmt.Errorf("%s: %w", a.Name, err)
 		}
 		reports = append(reports, OutdatedReport{
-			Name:        a.Name,
-			Locked:      a.Version,
-			Latest:      st.Latest,
-			Behind:      st.Latest != "" && vers.Compare(a.Version, st.Latest) < 0,
-			AgeDays:     daysSince(st.LatestTime),
-			LastPublish: st.LastPublish,
-			Deprecated:  st.Deprecated,
-			Yanked:      st.Yanked,
+			Name:                a.Name,
+			Locked:              a.Version,
+			Latest:              st.Latest,
+			Behind:              st.Latest != "" && vers.Compare(a.Version, st.Latest) < 0,
+			AgeDays:             daysSince(st.LatestTime),
+			LastPublish:         st.LastPublish,
+			Deprecated:          st.Deprecated,
+			Yanked:              st.Yanked,
+			ProvenanceDowngrade: st.LockedHasProvenance && !st.LatestHasProvenance,
+			ProvenanceUpgrade:   !st.LockedHasProvenance && st.LatestHasProvenance,
 		})
 	}
 	sort.Slice(reports, func(i, j int) bool { return reports[i].Name < reports[j].Name })

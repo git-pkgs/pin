@@ -76,12 +76,14 @@ type packageDoc struct {
 }
 
 type PackageStatus struct {
-	Latest      string
-	LatestTime  string
-	LastPublish string
-	Deprecated  string
-	Yanked      bool
-	License     string
+	Latest              string
+	LatestTime          string
+	LastPublish         string
+	Deprecated          string
+	Yanked              bool
+	License             string
+	LockedHasProvenance bool
+	LatestHasProvenance bool
 }
 
 // Status reports registry-side health signals for a locked package version.
@@ -96,6 +98,7 @@ func (s *Source) Status(ctx context.Context, name, lockedVersion string) (*Packa
 	}
 	if st.Latest != "" {
 		st.LatestTime = doc.Time[st.Latest]
+		st.LatestHasProvenance = versionHasProvenance(doc.Versions[st.Latest])
 	}
 
 	raw, ok := doc.Versions[lockedVersion]
@@ -110,7 +113,23 @@ func (s *Source) Status(ctx context.Context, name, lockedVersion string) (*Packa
 	_ = json.Unmarshal(raw, &v)
 	st.Deprecated = v.Deprecated
 	st.License = parseLicense(v.License)
+	st.LockedHasProvenance = versionHasProvenance(raw)
 	return st, nil
+}
+
+func versionHasProvenance(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var v struct {
+		Dist struct {
+			Attestations []json.RawMessage `json:"attestations"`
+		} `json:"dist"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return false
+	}
+	return len(v.Dist.Attestations) > 0
 }
 
 // ResolveVersion turns a manifest constraint into an exact published version.
