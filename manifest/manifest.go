@@ -76,12 +76,20 @@ func (m *Manifest) validate(raw []byte) error {
 	return nil
 }
 
+const (
+	keyName    = "name"
+	keyVersion = "version"
+	keySource  = "source"
+	keyFiles   = "files"
+	keyFormat  = "format"
+)
+
 var allowedEntryKeys = map[string]bool{
-	"name":    true,
-	"version": true,
-	"source":  true,
-	"files":   true,
-	"format":  true,
+	keyName:    true,
+	keyVersion: true,
+	keySource:  true,
+	keyFiles:   true,
+	keyFormat:  true,
 }
 
 // strictAssets walks each asset's mapping node and rejects keys not in
