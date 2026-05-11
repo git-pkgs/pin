@@ -21,6 +21,13 @@ import (
 
 const Version = 1
 
+// MaxLockfileBytes caps the size of a lockfile a reader will accept. The
+// largest plausible scrutineer-shaped lockfile (~9 files, 311 lines) is
+// well under 10 KiB; even a 1000-file monorepo lockfile stays under 1 MiB.
+// 16 MiB is the upper bound a denial-of-service-prevention cap should
+// allow without inconveniencing real use.
+const MaxLockfileBytes = 16 << 20
+
 type Lock struct {
 	LockfileVersion int
 	GeneratedBy     string
@@ -45,8 +52,16 @@ type Asset struct {
 }
 
 func Read(r io.Reader) (*Lock, error) {
+	limited := io.LimitReader(r, MaxLockfileBytes+1)
+	raw, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("read lockfile: %w", err)
+	}
+	if int64(len(raw)) > MaxLockfileBytes {
+		return nil, fmt.Errorf("lockfile exceeds %d bytes", MaxLockfileBytes)
+	}
 	var bom cdxBOM
-	if err := json.NewDecoder(r).Decode(&bom); err != nil {
+	if err := json.Unmarshal(raw, &bom); err != nil {
 		return nil, fmt.Errorf("parse lockfile: %w", err)
 	}
 	if bom.BOMFormat != cdxBOMFormat {

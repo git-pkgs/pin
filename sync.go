@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/git-pkgs/pin/cdn"
 	"github.com/git-pkgs/pin/lock"
@@ -134,6 +135,21 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 type fileContent struct {
 	out     string
 	content []byte
+}
+
+// safeOut returns an error if any joined path component would let a
+// vendored file escape the project's out directory. Defence in depth:
+// the manifest validates files: paths and slugs are built from sanitised
+// names, but the joined output path is checked one more time before any
+// bytes hit the disk.
+func safeOut(dir, outDir, out string) (string, error) {
+	root := filepath.Clean(filepath.Join(dir, outDir))
+	dst := filepath.Clean(filepath.Join(root, filepath.FromSlash(out)))
+	rel, err := filepath.Rel(root, dst)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to write outside out dir: out=%q resolves to %q", out, dst)
+	}
+	return dst, nil
 }
 
 type sources struct {
@@ -284,7 +300,10 @@ func outputPath(layout manifest.Layout, slug, version, packagePath string) strin
 func writeFiles(dir, outDir string, files []fileContent) ([]string, error) {
 	var written []string
 	for _, f := range files {
-		dst := filepath.Join(dir, outDir, filepath.FromSlash(f.out))
+		dst, err := safeOut(dir, outDir, f.out)
+		if err != nil {
+			return written, err
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), dirPerm); err != nil {
 			return written, err
 		}
