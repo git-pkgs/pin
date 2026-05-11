@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/git-pkgs/purl"
 	"gopkg.in/yaml.v3"
 )
 
@@ -163,6 +164,28 @@ func (e *Entry) Source() Source {
 		e.src = s
 	}
 	return e.src
+}
+
+// PURL returns the canonical purl for this entry at the given resolved version.
+// npm: pkg:npm/[%40scope/]name@version
+// forge: pkg:{forge}/owner/repo@version
+// url: pkg:generic/name@version?download_url=...
+func (e *Entry) PURL(resolvedVersion string) *purl.PURL {
+	s := e.Source()
+	switch s.Kind {
+	case SourceForge:
+		return purl.New(s.Forge, s.Owner, s.Repo, resolvedVersion, nil)
+	case SourceURL:
+		return purl.New("generic", "", e.Name, resolvedVersion, map[string]string{"download_url": s.URL})
+	case SourceNPM:
+		fallthrough
+	default:
+		ns, name := "", e.Name
+		if strings.HasPrefix(name, "@") {
+			ns, name, _ = strings.Cut(name, "/")
+		}
+		return purl.New("npm", ns, name, resolvedVersion, nil)
+	}
 }
 
 func (e *Entry) Slug() string {

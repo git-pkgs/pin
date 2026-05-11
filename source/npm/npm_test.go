@@ -13,7 +13,18 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/git-pkgs/purl"
 )
+
+func npmPURL(name, version string) *purl.PURL {
+	ns := ""
+	n := name
+	if strings.HasPrefix(name, "@") {
+		ns, n, _ = strings.Cut(name, "/")
+	}
+	return purl.New("npm", ns, n, version, nil)
+}
 
 type fakePackage struct {
 	name    string
@@ -114,7 +125,7 @@ func TestResolve(t *testing.T) {
 	srv := newFakeRegistry(t, pkg)
 
 	src := New(Options{RegistryURL: srv.URL})
-	got, err := src.Resolve(context.Background(), "demo", "1.2.3", []string{"dist/demo.min.js", "dist/demo.min.css"})
+	got, err := src.Resolve(context.Background(), npmPURL("demo", "1.2.3"), []string{"dist/demo.min.js", "dist/demo.min.css"})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -168,7 +179,7 @@ func TestResolveDefaultEntryPoint(t *testing.T) {
 	srv := newFakeRegistry(t, pkg)
 	src := New(Options{RegistryURL: srv.URL})
 
-	got, err := src.Resolve(context.Background(), "demo", "1.0.0", nil)
+	got, err := src.Resolve(context.Background(), npmPURL("demo", "1.0.0"), nil)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -187,7 +198,7 @@ func TestResolveMissingFile(t *testing.T) {
 	srv := newFakeRegistry(t, pkg)
 	src := New(Options{RegistryURL: srv.URL})
 
-	_, err := src.Resolve(context.Background(), "demo", "1.0.0", []string{"does/not/exist.js"})
+	_, err := src.Resolve(context.Background(), npmPURL("demo", "1.0.0"), []string{"does/not/exist.js"})
 	if err == nil || !strings.Contains(err.Error(), "does/not/exist.js") {
 		t.Fatalf("expected error mentioning missing file, got %v", err)
 	}
@@ -208,7 +219,7 @@ func TestResolveIntegrityMismatch(t *testing.T) {
 		},
 	})
 
-	_, err := src.Resolve(context.Background(), "demo", "1.0.0", nil)
+	_, err := src.Resolve(context.Background(), npmPURL("demo", "1.0.0"), nil)
 	if err == nil || !strings.Contains(err.Error(), "integrity") {
 		t.Fatalf("expected integrity mismatch error, got %v", err)
 	}
@@ -224,7 +235,7 @@ func TestResolveTarballSizeCap(t *testing.T) {
 	srv := newFakeRegistry(t, pkg)
 	src := New(Options{RegistryURL: srv.URL, MaxTarballBytes: 100})
 
-	_, err := src.Resolve(context.Background(), "demo", "1.0.0", nil)
+	_, err := src.Resolve(context.Background(), npmPURL("demo", "1.0.0"), nil)
 	if err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("expected size cap error, got %v", err)
 	}
@@ -240,7 +251,7 @@ func TestScopedPackagePURL(t *testing.T) {
 	srv := newFakeRegistry(t, pkg)
 	src := New(Options{RegistryURL: srv.URL})
 
-	got, err := src.Resolve(context.Background(), "@scope/pkg", "1.0.0", []string{"index.js"})
+	got, err := src.Resolve(context.Background(), npmPURL("@scope/pkg", "1.0.0"), []string{"index.js"})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

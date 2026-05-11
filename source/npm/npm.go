@@ -15,6 +15,8 @@ import (
 	"github.com/git-pkgs/archives"
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
+
+	"github.com/git-pkgs/pin/source"
 )
 
 const (
@@ -52,22 +54,9 @@ func New(opts Options) *Source {
 	return &Source{opts: opts, http: c}
 }
 
-type Resolved struct {
-	Name             string
-	Version          string
-	PURL             string
-	PackageIntegrity string
-	License          string
-	SourceRepository string
-	Files            []ResolvedFile
-}
-
-type ResolvedFile struct {
-	Path      string
-	Integrity string
-	Size      int64
-	Content   []byte
-}
+// Resolved and ResolvedFile are re-exported from source for compatibility.
+type Resolved = source.Resolved
+type ResolvedFile = source.ResolvedFile
 
 type npmVersion struct {
 	Name       string          `json:"name"`
@@ -80,7 +69,13 @@ type npmVersion struct {
 	} `json:"dist"`
 }
 
-func (s *Source) Resolve(ctx context.Context, name, version string, files []string) (*Resolved, error) {
+// Resolve fetches the named files for the package identified by p (whose
+// Type must be "npm"). When files is nil, the package's declared entry
+// point is used.
+func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Resolved, error) {
+	name := p.FullName()
+	version := p.Version
+
 	meta, err := s.fetchMetadata(ctx, name, version)
 	if err != nil {
 		return nil, err
@@ -121,7 +116,7 @@ func (s *Source) Resolve(ctx context.Context, name, version string, files []stri
 	return &Resolved{
 		Name:             meta.Name,
 		Version:          meta.Version,
-		PURL:             buildPURL(meta.Name, meta.Version),
+		PURL:             p.String(),
 		PackageIntegrity: meta.Dist.Integrity,
 		License:          parseLicense(meta.License),
 		SourceRepository: parseRepository(meta.Repository),
@@ -207,16 +202,6 @@ func extractFiles(r archives.Reader, paths []string) ([]ResolvedFile, error) {
 		})
 	}
 	return out, nil
-}
-
-func buildPURL(name, version string) string {
-	var ns, n string
-	if strings.HasPrefix(name, "@") {
-		ns, n, _ = strings.Cut(name, "/")
-	} else {
-		n = name
-	}
-	return purl.New("npm", ns, n, version, nil).String()
 }
 
 func parseLicense(raw json.RawMessage) string {

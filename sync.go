@@ -17,6 +17,7 @@ import (
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
 	"github.com/git-pkgs/pin/sniff"
+	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 )
 
@@ -39,6 +40,7 @@ type SyncOptions struct {
 	DryRun      bool
 	Frozen      bool
 	RegistryURL string
+	Forge       forge.Options
 
 	// Update names whose lock-is-sticky check is bypassed: those entries
 	// re-resolve against the registry even if the locked version still
@@ -77,7 +79,10 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 		return nil, err
 	}
 
-	npmSrc := npm.New(npm.Options{RegistryURL: opts.RegistryURL})
+	srcs := sources{
+		npm:   npm.New(npm.Options{RegistryURL: opts.RegistryURL}),
+		forge: forge.New(opts.Forge),
+	}
 	prevVersions := lockedVersionsByName(prev)
 
 	if opts.Frozen {
@@ -94,7 +99,7 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 		if opts.forceResolve(entry.Name) {
 			locked = ""
 		}
-		assets, files, rerr := resolveEntry(ctx, npmSrc, m, &entry, locked)
+		assets, files, rerr := resolveEntry(ctx, srcs, m, &entry, locked)
 		if rerr != nil {
 			return nil, rerr
 		}
@@ -129,11 +134,24 @@ type fileContent struct {
 	content []byte
 }
 
-func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
-	if e.Source().Kind != manifest.SourceNPM {
-		return nil, nil, fmt.Errorf("%s: only npm sources are supported in this build", e.Name)
-	}
+type sources struct {
+	npm   *npm.Source
+	forge *forge.Source
+}
 
+func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
+	src := e.Source()
+	switch src.Kind {
+	case manifest.SourceNPM:
+		return resolveNPMEntry(ctx, srcs.npm, m, e, lockedVersion)
+	case manifest.SourceForge:
+		return resolveForgeEntry(ctx, srcs.forge, m, e, src)
+	default:
+		return nil, nil, fmt.Errorf("%s: source kind %q not supported in this build", e.Name, src.Kind)
+	}
+}
+
+func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	version := lockedVersion
 	if !npm.IsSticky(lockedVersion, e.Version) {
 		v, err := src.ResolveVersion(ctx, e.Name, e.Version)
@@ -143,7 +161,7 @@ func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e 
 		version = v
 	}
 
-	resolved, err := src.Resolve(ctx, e.Name, version, e.Files)
+	resolved, err := src.Resolve(ctx, e.PURL(version), e.Files)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,6 +190,42 @@ func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e 
 			Size:             f.Size,
 			PackageIntegrity: resolved.PackageIntegrity,
 			License:          resolved.License,
+			SourceRepository: resolved.SourceRepository,
+		})
+		files = append(files, fileContent{out: out, content: f.Content})
+	}
+	return assets, files, nil
+}
+
+func resolveForgeEntry(ctx context.Context, src *forge.Source, m *manifest.Manifest, e *manifest.Entry, _ manifest.Source) ([]lock.Asset, []fileContent, error) {
+	resolved, err := src.Resolve(ctx, e.PURL(e.Version), e.Files)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	slug := e.Slug()
+	assets := make([]lock.Asset, 0, len(resolved.Files))
+	files := make([]fileContent, 0, len(resolved.Files))
+
+	for _, f := range resolved.Files {
+		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
+		assetType := lock.ClassifyType(f.Path)
+		format := e.Format
+		if format == "" && assetType == lock.TypeScript {
+			format = sniff.Format(f.Content)
+		}
+		assets = append(assets, lock.Asset{
+			Name:             e.Name,
+			Version:          resolved.Version,
+			PURL:             resolved.PURL,
+			Type:             string(assetType),
+			Format:           format,
+			Path:             f.Path,
+			Out:              out,
+			URL:              f.URL,
+			Integrity:        f.Integrity,
+			Size:             f.Size,
+			PackageIntegrity: resolved.PackageIntegrity,
 			SourceRepository: resolved.SourceRepository,
 		})
 		files = append(files, fileContent{out: out, content: f.Content})
