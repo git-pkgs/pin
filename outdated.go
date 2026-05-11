@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/git-pkgs/pin/source/npm"
@@ -69,6 +70,14 @@ func Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, erro
 			continue
 		}
 		seen[a.Name] = true
+
+		if !strings.HasPrefix(a.PURL, "pkg:npm/") {
+			reports = append(reports, OutdatedReport{
+				Name:   a.Name,
+				Locked: a.Version,
+			})
+			continue
+		}
 
 		st, err := src.Status(ctx, a.Name, a.Version)
 		if err != nil {
