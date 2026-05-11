@@ -15,6 +15,7 @@ import (
 	"github.com/git-pkgs/archives"
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
+	"github.com/sigstore/sigstore-go/pkg/root"
 
 	"github.com/git-pkgs/pin/source"
 )
@@ -30,6 +31,11 @@ type Options struct {
 	RegistryURL     string
 	MaxTarballBytes int64
 	HTTPClient      *client.Client
+
+	// VerifyProvenance turns on cryptographic verification of the sigstore
+	// bundle for each version with an attestation. Requires TrustedRoot.
+	VerifyProvenance bool
+	TrustedRoot      *root.TrustedRoot
 
 	// test hook: forces a different package integrity to provoke a mismatch.
 	overrideIntegrity func(name string) string
@@ -113,7 +119,16 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 		return nil, fmt.Errorf("%s@%s: %w", name, version, err)
 	}
 
-	att, _ := s.fetchAttestation(ctx, json.RawMessage(metaRaw))
+	att, attBundle, _ := s.fetchAttestationWithBundle(ctx, json.RawMessage(metaRaw))
+
+	if att != nil && s.opts.VerifyProvenance {
+		if s.opts.TrustedRoot == nil {
+			return nil, fmt.Errorf("%s@%s: --verify-provenance requires a Sigstore trust root", name, version)
+		}
+		if err := VerifyAttestation(attBundle, tarball, s.opts.TrustedRoot); err != nil {
+			return nil, fmt.Errorf("%s@%s: provenance verification failed: %w", name, version, err)
+		}
+	}
 
 	return &Resolved{
 		Name:             meta.Name,

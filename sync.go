@@ -22,6 +22,7 @@ import (
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
+	"github.com/sigstore/sigstore-go/pkg/root"
 )
 
 const (
@@ -64,6 +65,12 @@ type SyncOptions struct {
 	// CI, but the source_repository field will not match the legitimate
 	// package's repo.
 	RequirePublisherMatchesRepository bool
+
+	// VerifyProvenance cryptographically verifies each attestation
+	// bundle against Sigstore's TUF trust root (Fulcio cert chain,
+	// Rekor inclusion proof, DSSE signature, subject digest matches
+	// the fetched tarball). Implies fetching the trust root from TUF.
+	VerifyProvenance bool
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
@@ -95,10 +102,9 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 		return nil, err
 	}
 
-	srcs := sources{
-		npm:    npm.New(npm.Options{RegistryURL: opts.RegistryURL}),
-		forge:  forge.New(opts.Forge),
-		rawurl: rawurl.New(rawurl.Options{}),
+	srcs, err := buildSources(opts)
+	if err != nil {
+		return nil, err
 	}
 	prevVersions := lockedVersionsByName(prev)
 
@@ -181,6 +187,22 @@ type sources struct {
 	npm    *npm.Source
 	forge  *forge.Source
 	rawurl *rawurl.Source
+}
+
+func buildSources(opts SyncOptions) (sources, error) {
+	npmOpts := npm.Options{RegistryURL: opts.RegistryURL, VerifyProvenance: opts.VerifyProvenance}
+	if opts.VerifyProvenance {
+		tr, err := root.FetchTrustedRoot()
+		if err != nil {
+			return sources{}, fmt.Errorf("--verify-provenance: fetch Sigstore trust root: %w", err)
+		}
+		npmOpts.TrustedRoot = tr
+	}
+	return sources{
+		npm:    npm.New(npmOpts),
+		forge:  forge.New(opts.Forge),
+		rawurl: rawurl.New(rawurl.Options{}),
+	}, nil
 }
 
 func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {

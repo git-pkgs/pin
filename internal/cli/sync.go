@@ -72,5 +72,6 @@ func newSyncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit the resolved lockfile as JSON instead of a summary (use with --dry-run for managers' resolve)")
 	cmd.Flags().BoolVar(&opts.StrictProvenance, "strict-provenance", false, "fail if any npm entry resolves to a version with no attestation")
 	cmd.Flags().BoolVar(&opts.RequirePublisherMatchesRepository, "require-publisher-matches-repository", false, "fail if an attestation's build workflow lives on a different repository than the package's declared repository.url (catches leaked-token attacks)")
+	cmd.Flags().BoolVar(&opts.VerifyProvenance, "verify-provenance", false, "cryptographically verify each sigstore attestation bundle against the live Sigstore TUF trust root")
 	return cmd
 }

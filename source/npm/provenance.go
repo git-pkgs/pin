@@ -25,41 +25,41 @@ type distAttestationsRef struct {
 	} `json:"provenance"`
 }
 
-// attestationListResponse is what the npm /-/npm/v1/attestations endpoint
-// returns: an array of {predicateType, bundle} entries.
-type attestationListResponse struct {
-	Attestations []struct {
-		PredicateType string         `json:"predicateType"`
-		Bundle        sigstoreBundle `json:"bundle"`
-	} `json:"attestations"`
-}
-
-// fetchAttestation looks up the SLSA Provenance attestation for a version.
-// Returns nil with no error when the version has no attestation pointer.
-func (s *Source) fetchAttestation(ctx context.Context, raw json.RawMessage) (*Attestation, error) {
+// fetchAttestationWithBundle returns both the parsed metadata and the raw
+// bundle JSON, the latter useful for cryptographic verification.
+func (s *Source) fetchAttestationWithBundle(ctx context.Context, raw json.RawMessage) (*Attestation, []byte, error) {
 	ref := findAttestationRef(raw)
 	if ref == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-	var list attestationListResponse
+	var list struct {
+		Attestations []struct {
+			PredicateType string          `json:"predicateType"`
+			Bundle        json.RawMessage `json:"bundle"`
+		} `json:"attestations"`
+	}
 	if err := s.http.GetJSON(ctx, ref.URL, &list); err != nil {
-		return nil, fmt.Errorf("fetch attestations %s: %w", ref.URL, err)
+		return nil, nil, fmt.Errorf("fetch attestations %s: %w", ref.URL, err)
 	}
 	for _, a := range list.Attestations {
 		if !strings.HasPrefix(a.PredicateType, "https://slsa.dev/provenance/") {
 			continue
 		}
-		att, err := extractFromBundle(&a.Bundle)
+		var b sigstoreBundle
+		if err := json.Unmarshal(a.Bundle, &b); err != nil {
+			return nil, nil, fmt.Errorf("decode bundle: %w", err)
+		}
+		att, err := extractFromBundle(&b)
 		if err != nil {
-			return nil, fmt.Errorf("parse attestation bundle %s: %w", ref.URL, err)
+			return nil, nil, fmt.Errorf("parse attestation bundle %s: %w", ref.URL, err)
 		}
 		att.BundleURL = ref.URL
 		if att.PredicateType == "" {
 			att.PredicateType = a.PredicateType
 		}
-		return att, nil
+		return att, []byte(a.Bundle), nil
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func findAttestationRef(raw json.RawMessage) *distAttestationsRef {
