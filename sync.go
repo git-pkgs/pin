@@ -63,12 +63,13 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	}
 
 	npmSrc := npm.New(npm.Options{RegistryURL: opts.RegistryURL})
+	prevVersions := lockedVersionsByName(prev)
 
 	next := &lock.Lock{OutDir: m.Out}
 	var written []string
 
 	for _, entry := range m.Assets {
-		assets, files, rerr := resolveEntry(ctx, npmSrc, m, &entry)
+		assets, files, rerr := resolveEntry(ctx, npmSrc, m, &entry, prevVersions[entry.Name])
 		if rerr != nil {
 			return nil, rerr
 		}
@@ -108,12 +109,21 @@ type fileContent struct {
 	content []byte
 }
 
-func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry) ([]lock.Asset, []fileContent, error) {
+func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	if e.Source().Kind != manifest.SourceNPM {
 		return nil, nil, fmt.Errorf("%s: only npm sources are supported in this build", e.Name)
 	}
 
-	resolved, err := src.Resolve(ctx, e.Name, e.Version, e.Files)
+	version := lockedVersion
+	if !npm.IsSticky(lockedVersion, e.Version) {
+		v, err := src.ResolveVersion(ctx, e.Name, e.Version)
+		if err != nil {
+			return nil, nil, err
+		}
+		version = v
+	}
+
+	resolved, err := src.Resolve(ctx, e.Name, version, e.Files)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -180,6 +190,17 @@ func removeOrphans(dir, outDir string, orphans []lock.Asset) ([]string, error) {
 		removed = append(removed, a.Out)
 	}
 	return removed, nil
+}
+
+func lockedVersionsByName(l *lock.Lock) map[string]string {
+	out := map[string]string{}
+	if l == nil {
+		return out
+	}
+	for _, a := range l.Assets {
+		out[a.Name] = a.Version
+	}
+	return out
 }
 
 func readManifest(path string) (*manifest.Manifest, error) {
