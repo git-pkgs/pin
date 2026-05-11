@@ -18,6 +18,7 @@ import (
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
 	"github.com/git-pkgs/pin/sniff"
+	"github.com/git-pkgs/pin/source"
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
@@ -50,6 +51,10 @@ type SyncOptions struct {
 	Update []string
 	// UpdateAll bypasses lock-is-sticky for every entry.
 	UpdateAll bool
+
+	// StrictProvenance fails sync when an npm entry resolves to a version
+	// that has no SLSA Provenance attestation recorded by the registry.
+	StrictProvenance bool
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
@@ -117,6 +122,12 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	}
 
 	changes := lock.Diff(prev, next)
+
+	if opts.StrictProvenance {
+		if err := assertProvenance(next); err != nil {
+			return nil, err
+		}
+	}
 
 	var removed []string
 	if !opts.DryRun {
@@ -226,6 +237,8 @@ func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest,
 	assets := make([]lock.Asset, 0, len(resolved.Files))
 	files := make([]fileContent, 0, len(resolved.Files))
 
+	att := toLockAttestation(resolved.Attestation)
+
 	for _, f := range resolved.Files {
 		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
 		assetType := lock.ClassifyType(f.Path)
@@ -247,10 +260,25 @@ func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest,
 			PackageIntegrity: resolved.PackageIntegrity,
 			License:          resolved.License,
 			SourceRepository: resolved.SourceRepository,
+			Attestation:      att,
 		})
 		files = append(files, fileContent{out: out, content: f.Content})
 	}
 	return assets, files, nil
+}
+
+func toLockAttestation(a *source.Attestation) *lock.Attestation {
+	if a == nil {
+		return nil
+	}
+	return &lock.Attestation{
+		PredicateType:    a.PredicateType,
+		BuilderID:        a.BuilderID,
+		SourceRepository: a.SourceRepository,
+		SourceRevision:   a.SourceRevision,
+		SignerIdentity:   a.SignerIdentity,
+		BundleURL:        a.BundleURL,
+	}
 }
 
 func resolveForgeEntry(ctx context.Context, src *forge.Source, m *manifest.Manifest, e *manifest.Entry, _ manifest.Source) ([]lock.Asset, []fileContent, error) {
@@ -373,6 +401,27 @@ func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]
 		if !manifestNames[a.Name] {
 			return fmt.Errorf("--frozen: %s is in the lockfile but not the manifest", a.Name)
 		}
+	}
+	return nil
+}
+
+func assertProvenance(l *lock.Lock) error {
+	seen := map[string]bool{}
+	var missing []string
+	for _, a := range l.Assets {
+		if seen[a.Name] {
+			continue
+		}
+		seen[a.Name] = true
+		if !strings.HasPrefix(a.PURL, "pkg:npm/") {
+			continue // only npm carries SLSA attestations today
+		}
+		if a.Attestation == nil {
+			missing = append(missing, a.Name+"@"+a.Version)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("--strict-provenance: no attestation recorded for: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

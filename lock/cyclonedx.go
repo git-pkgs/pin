@@ -53,7 +53,28 @@ type cdxComponent struct {
 	Licenses           []cdxLicense   `json:"licenses,omitempty"`
 	ExternalReferences []cdxExtRef    `json:"externalReferences,omitempty"`
 	Properties         []cdxProperty  `json:"properties,omitempty"`
+	Evidence           *cdxEvidence   `json:"evidence,omitempty"`
 	Components         []cdxComponent `json:"components,omitempty"`
+}
+
+type cdxEvidence struct {
+	Identity []cdxIdentity `json:"identity,omitempty"`
+}
+
+type cdxIdentity struct {
+	Field   string               `json:"field"`
+	Methods []cdxIdentityMethod  `json:"methods,omitempty"`
+	Tools   []cdxIdentityToolRef `json:"tools,omitempty"`
+}
+
+type cdxIdentityMethod struct {
+	Technique  string `json:"technique"`
+	Confidence string `json:"confidence,omitempty"`
+	Value      string `json:"value,omitempty"`
+}
+
+type cdxIdentityToolRef struct {
+	Ref string `json:"ref"`
 }
 
 type cdxHash struct {
@@ -123,10 +144,8 @@ func packageComponent(purl string, assets []Asset) cdxComponent {
 		Version: first.Version,
 		PURL:    purl,
 	}
-	if first.PackageIntegrity != "" {
-		if alg, hex, err := integrity.ParseSRI(first.PackageIntegrity); err == nil {
-			c.Hashes = []cdxHash{{Alg: alg, Content: hex}}
-		}
+	if h := encodePackageHash(first.PackageIntegrity); h != nil {
+		c.Hashes = []cdxHash{*h}
 	}
 	if first.License != "" {
 		c.Licenses = []cdxLicense{{License: cdxLicenseID{ID: first.License}}}
@@ -134,10 +153,59 @@ func packageComponent(purl string, assets []Asset) cdxComponent {
 	if first.SourceRepository != "" {
 		c.ExternalReferences = []cdxExtRef{{Type: "vcs", URL: first.SourceRepository}}
 	}
+	if first.Attestation != nil {
+		c.Properties = append(c.Properties, attestationProperties(first.Attestation)...)
+		if first.Attestation.BundleURL != "" {
+			c.ExternalReferences = append(c.ExternalReferences, cdxExtRef{Type: "attestation", URL: first.Attestation.BundleURL})
+		}
+	}
 	for _, a := range assets {
 		c.Components = append(c.Components, fileComponent(purl, a))
 	}
 	return c
+}
+
+const (
+	propPredicateType    = "pin:attestation.predicate_type"
+	propBuilderID        = "pin:attestation.builder_id"
+	propSourceRepository = "pin:attestation.source_repository"
+	propSourceRevision   = "pin:attestation.source_revision"
+	propSignerIdentity   = "pin:attestation.signer_identity"
+)
+
+func attestationProperties(a *Attestation) []cdxProperty {
+	var p []cdxProperty
+	if a.PredicateType != "" {
+		p = append(p, cdxProperty{Name: propPredicateType, Value: a.PredicateType})
+	}
+	if a.BuilderID != "" {
+		p = append(p, cdxProperty{Name: propBuilderID, Value: a.BuilderID})
+	}
+	if a.SourceRepository != "" {
+		p = append(p, cdxProperty{Name: propSourceRepository, Value: a.SourceRepository})
+	}
+	if a.SourceRevision != "" {
+		p = append(p, cdxProperty{Name: propSourceRevision, Value: a.SourceRevision})
+	}
+	if a.SignerIdentity != "" {
+		p = append(p, cdxProperty{Name: propSignerIdentity, Value: a.SignerIdentity})
+	}
+	return p
+}
+
+func readAttestation(props []cdxProperty, refs []cdxExtRef) *Attestation {
+	a := &Attestation{
+		PredicateType:    findProp(props, propPredicateType),
+		BuilderID:        findProp(props, propBuilderID),
+		SourceRepository: findProp(props, propSourceRepository),
+		SourceRevision:   findProp(props, propSourceRevision),
+		SignerIdentity:   findProp(props, propSignerIdentity),
+		BundleURL:        findExtRef(refs, "attestation"),
+	}
+	if a.PredicateType == "" && a.BuilderID == "" && a.BundleURL == "" {
+		return nil
+	}
+	return a
 }
 
 func fileComponent(parentPURL string, a Asset) cdxComponent {
@@ -178,15 +246,14 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 	for _, pkg := range bom.Components {
 		var pkgIntegrity string
 		if len(pkg.Hashes) > 0 {
-			if sri, err := integrity.FormatSRI(pkg.Hashes[0].Alg, pkg.Hashes[0].Content); err == nil {
-				pkgIntegrity = sri
-			}
+			pkgIntegrity = decodePackageHash(pkg.Hashes[0])
 		}
 		var license string
 		if len(pkg.Licenses) > 0 {
 			license = pkg.Licenses[0].License.ID
 		}
 		srcRepo := findExtRef(pkg.ExternalReferences, "vcs")
+		attestation := readAttestation(pkg.Properties, pkg.ExternalReferences)
 		for _, file := range pkg.Components {
 			a := Asset{
 				Name:             pkg.Name,
@@ -195,6 +262,7 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 				PackageIntegrity: pkgIntegrity,
 				License:          license,
 				SourceRepository: srcRepo,
+				Attestation:      attestation,
 				Path:             file.Name,
 				Out:              findProp(file.Properties, propOut),
 				Type:             findProp(file.Properties, propType),
@@ -213,6 +281,47 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 		}
 	}
 	return l, nil
+}
+
+// encodePackageHash converts an Asset.PackageIntegrity (either an SRI string
+// from npm or a bare commit SHA from a forge source) into a CycloneDX hash
+// entry. Forge SHAs are emitted as SHA-1; npm SRI is decoded to hex.
+func encodePackageHash(pkgIntegrity string) *cdxHash {
+	if pkgIntegrity == "" {
+		return nil
+	}
+	if alg, hex, err := integrity.ParseSRI(pkgIntegrity); err == nil {
+		return &cdxHash{Alg: alg, Content: hex}
+	}
+	if isCommitSHA(pkgIntegrity) {
+		return &cdxHash{Alg: "SHA-1", Content: pkgIntegrity}
+	}
+	return nil
+}
+
+// decodePackageHash is the inverse of encodePackageHash. SHA-1 entries pass
+// through as bare hex (forge commit SHAs); everything else round-trips via SRI.
+func decodePackageHash(h cdxHash) string {
+	if h.Alg == "SHA-1" && isCommitSHA(h.Content) {
+		return h.Content
+	}
+	if sri, err := integrity.FormatSRI(h.Alg, h.Content); err == nil {
+		return sri
+	}
+	return ""
+}
+
+func isCommitSHA(s string) bool {
+	const commitSHALen = 40
+	if len(s) != commitSHALen {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 func toolString(bom *cdxBOM) string {

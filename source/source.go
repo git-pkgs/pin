@@ -33,7 +33,20 @@ type Resolved struct {
 	PackageIntegrity string
 	License          string
 	SourceRepository string
+	Attestation      *Attestation
 	Files            []ResolvedFile
+}
+
+// Attestation holds the publisher-side provenance metadata for a package
+// version. Fields follow SLSA Provenance v1 vocabulary. Nil when the
+// version was published without provenance.
+type Attestation struct {
+	PredicateType    string
+	BuilderID        string
+	SourceRepository string
+	SourceRevision   string
+	SignerIdentity   string
+	BundleURL        string
 }
 
 // ResolvedFile is one fetched file inside a package.

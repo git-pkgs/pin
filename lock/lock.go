@@ -49,6 +49,20 @@ type Asset struct {
 	PackageIntegrity string
 	License          string
 	SourceRepository string
+	Attestation      *Attestation
+}
+
+// Attestation records the SLSA Provenance v1 fields for a package version,
+// populated when the publisher used trusted publishing. Cryptographic
+// verification of the underlying sigstore bundle is a separate step;
+// pin v0.2 records the metadata without verifying yet.
+type Attestation struct {
+	PredicateType    string
+	BuilderID        string
+	SourceRepository string
+	SourceRevision   string
+	SignerIdentity   string
+	BundleURL        string
 }
 
 func Read(r io.Reader) (*Lock, error) {

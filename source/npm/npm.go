@@ -76,7 +76,7 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 	name := p.FullName()
 	version := p.Version
 
-	meta, err := s.fetchMetadata(ctx, name, version)
+	meta, metaRaw, err := s.fetchMetadataRaw(ctx, name, version)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +113,8 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 		return nil, fmt.Errorf("%s@%s: %w", name, version, err)
 	}
 
+	att, _ := s.fetchAttestation(ctx, json.RawMessage(metaRaw))
+
 	return &Resolved{
 		Name:             meta.Name,
 		Version:          meta.Version,
@@ -120,20 +122,25 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 		PackageIntegrity: meta.Dist.Integrity,
 		License:          parseLicense(meta.License),
 		SourceRepository: parseRepository(meta.Repository),
+		Attestation:      att,
 		Files:            resolvedFiles,
 	}, nil
 }
 
-func (s *Source) fetchMetadata(ctx context.Context, name, version string) (*npmVersion, error) {
+func (s *Source) fetchMetadataRaw(ctx context.Context, name, version string) (*npmVersion, []byte, error) {
 	u := strings.TrimRight(s.opts.RegistryURL, "/") + "/" + name + "/" + url.PathEscape(version)
+	body, err := s.http.GetBody(ctx, u)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetch %s@%s metadata: %w", name, version, err)
+	}
 	var meta npmVersion
-	if err := s.http.GetJSON(ctx, u, &meta); err != nil {
-		return nil, fmt.Errorf("fetch %s@%s metadata: %w", name, version, err)
+	if err := json.Unmarshal(body, &meta); err != nil {
+		return nil, nil, fmt.Errorf("decode %s@%s metadata: %w", name, version, err)
 	}
 	if meta.Dist.Tarball == "" {
-		return nil, fmt.Errorf("%s@%s: registry response has no dist.tarball", name, version)
+		return nil, nil, fmt.Errorf("%s@%s: registry response has no dist.tarball", name, version)
 	}
-	return &meta, nil
+	return &meta, body, nil
 }
 
 func (s *Source) fetchTarball(ctx context.Context, tarballURL string) ([]byte, error) {
