@@ -19,6 +19,7 @@ import (
 	"github.com/git-pkgs/pin/sniff"
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
+	"github.com/git-pkgs/pin/source/rawurl"
 )
 
 const (
@@ -80,8 +81,9 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	}
 
 	srcs := sources{
-		npm:   npm.New(npm.Options{RegistryURL: opts.RegistryURL}),
-		forge: forge.New(opts.Forge),
+		npm:    npm.New(npm.Options{RegistryURL: opts.RegistryURL}),
+		forge:  forge.New(opts.Forge),
+		rawurl: rawurl.New(rawurl.Options{}),
 	}
 	prevVersions := lockedVersionsByName(prev)
 
@@ -135,8 +137,9 @@ type fileContent struct {
 }
 
 type sources struct {
-	npm   *npm.Source
-	forge *forge.Source
+	npm    *npm.Source
+	forge  *forge.Source
+	rawurl *rawurl.Source
 }
 
 func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
@@ -146,9 +149,46 @@ func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *ma
 		return resolveNPMEntry(ctx, srcs.npm, m, e, lockedVersion)
 	case manifest.SourceForge:
 		return resolveForgeEntry(ctx, srcs.forge, m, e, src)
+	case manifest.SourceURL:
+		return resolveURLEntry(ctx, srcs.rawurl, m, e)
 	default:
 		return nil, nil, fmt.Errorf("%s: source kind %q not supported in this build", e.Name, src.Kind)
 	}
+}
+
+func resolveURLEntry(ctx context.Context, src *rawurl.Source, m *manifest.Manifest, e *manifest.Entry) ([]lock.Asset, []fileContent, error) {
+	resolved, err := src.Resolve(ctx, e.PURL(e.Version), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	slug := e.Slug()
+	assets := make([]lock.Asset, 0, len(resolved.Files))
+	files := make([]fileContent, 0, len(resolved.Files))
+
+	for _, f := range resolved.Files {
+		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
+		assetType := lock.ClassifyType(f.Path)
+		format := e.Format
+		if format == "" && assetType == lock.TypeScript {
+			format = sniff.Format(f.Content)
+		}
+		assets = append(assets, lock.Asset{
+			Name:             e.Name,
+			Version:          resolved.Version,
+			PURL:             resolved.PURL,
+			Type:             string(assetType),
+			Format:           format,
+			Path:             f.Path,
+			Out:              out,
+			URL:              f.URL,
+			Integrity:        f.Integrity,
+			Size:             f.Size,
+			PackageIntegrity: f.Integrity,
+		})
+		files = append(files, fileContent{out: out, content: f.Content})
+	}
+	return assets, files, nil
 }
 
 func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
