@@ -1,0 +1,18 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+
+linters:
+  enable:
+    - gocritic
+    - gocognit
+    - gocyclo
+    - maintidx
+    - dupl
+    - mnd
+    - unparam
+    - ireturn
+    - goconst
+    - errcheck
