@@ -15,18 +15,10 @@ const yamlIndent = 2
 // alphabetic position by name and writes the result. Comments and the
 // rest of the document are preserved via the yaml.v3 Node API.
 func AddEntry(in io.Reader, out io.Writer, e Entry) error {
-	raw, err := io.ReadAll(in)
+	doc, root, err := readDoc(in)
 	if err != nil {
 		return err
 	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return fmt.Errorf("parse manifest: %w", err)
-	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return fmt.Errorf("manifest is empty or not a YAML document")
-	}
-	root := doc.Content[0]
 
 	assets := findKey(root, "assets")
 	if assets == nil {
@@ -59,16 +51,60 @@ func AddEntry(in io.Reader, out io.Writer, e Entry) error {
 		return ni.Value < nj.Value
 	})
 
+	return writeDoc(out, doc)
+}
+
+// RemoveEntry removes the named asset from a pin.yaml document and writes
+// the result. Comments and the rest of the document are preserved.
+func RemoveEntry(in io.Reader, out io.Writer, name string) error {
+	doc, root, err := readDoc(in)
+	if err != nil {
+		return err
+	}
+	assets := findKey(root, "assets")
+	if assets == nil || assets.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%s is not in the manifest", name)
+	}
+	idx := -1
+	for i, n := range assets.Content {
+		if k := findKey(n, keyName); k != nil && k.Value == name {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return fmt.Errorf("%s is not in the manifest", name)
+	}
+	assets.Content = append(assets.Content[:idx], assets.Content[idx+1:]...)
+	return writeDoc(out, doc)
+}
+
+func readDoc(in io.Reader) (*yaml.Node, *yaml.Node, error) {
+	raw, err := io.ReadAll(in)
+	if err != nil {
+		return nil, nil, err
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, nil, fmt.Errorf("parse manifest: %w", err)
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil, nil, fmt.Errorf("manifest is empty or not a YAML document")
+	}
+	return &doc, doc.Content[0], nil
+}
+
+func writeDoc(out io.Writer, doc *yaml.Node) error {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(yamlIndent)
-	if err := enc.Encode(&doc); err != nil {
+	if err := enc.Encode(doc); err != nil {
 		return err
 	}
 	if err := enc.Close(); err != nil {
 		return err
 	}
-	_, err = out.Write(buf.Bytes())
+	_, err := out.Write(buf.Bytes())
 	return err
 }
 
