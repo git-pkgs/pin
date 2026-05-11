@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/git-pkgs/pin/cdn"
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
 	"github.com/git-pkgs/pin/source/npm"
@@ -159,6 +160,7 @@ func resolveEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e 
 			Format:           e.Format,
 			Path:             f.Path,
 			Out:              out,
+			URL:              cdn.NPMFileURL(cdn.JSDelivr, resolved.Name, resolved.Version, f.Path),
 			Integrity:        f.Integrity,
 			Size:             f.Size,
 			PackageIntegrity: resolved.PackageIntegrity,
