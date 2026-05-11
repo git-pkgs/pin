@@ -20,6 +20,7 @@ const (
 
 const (
 	maxScanBytes = 64 << 10
+	tailScanLen  = 4 << 10
 	delimLen     = 2
 )
 
@@ -35,9 +36,9 @@ var (
 	reESMImportStr = regexp.MustCompile(`\bimport\s*['"]`)
 	reCJSModule    = regexp.MustCompile(`\bmodule\.exports\b|\bexports\.[A-Za-z_$]|\bexports\s*\[`)
 	reCJSDefine    = regexp.MustCompile(`Object\.defineProperty\s*\(\s*exports\s*,`)
-	reIIFEWrapped  = regexp.MustCompile(`^[\s;]*[!~+\-]?\s*\(?\s*(function\s*\(|\(\s*\)\s*=>)`)
+	reIIFEWrapped  = regexp.MustCompile("^[\\s;\"'`]*[!~+\\-]?\\s*\\(?\\s*(function\\s*\\(|\\(\\s*\\)\\s*=>)")
 	reIIFEAssigned = regexp.MustCompile(`^[\s;]*(var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*\(?\s*function\s*\(`)
-	reTrailingCall = regexp.MustCompile(`\}\s*\)?\s*\(\s*[^)]*\)\s*;?\s*$`)
+	reTrailingCall = regexp.MustCompile(`\}\s*\)?\s*\(\s*[^)]{0,200}\)\s*;`)
 )
 
 // Format returns the detected module format of a JavaScript source.
@@ -47,10 +48,15 @@ func Format(src []byte) string {
 	if len(src) == 0 {
 		return Unknown
 	}
-	if len(src) > maxScanBytes {
-		src = src[:maxScanBytes]
+	headSrc := src
+	if len(headSrc) > maxScanBytes {
+		headSrc = src[:maxScanBytes]
 	}
-	masked := stripStringsAndComments(src)
+	masked := stripStringsAndComments(headSrc)
+	// The tail is checked unmasked: stripStringsAndComments walking from a
+	// buffer that starts mid-string mis-detects context, and reTrailingCall
+	// is structural enough (}, ), (, ;, end-of-string) to not false-positive.
+	tail := tailBytes(src, tailScanLen)
 
 	if reTypeofDefine.Match(masked) && reDefineAMD.Match(masked) {
 		return UMD
@@ -68,10 +74,17 @@ func Format(src []byte) string {
 	if reCJSModule.Match(masked) || reCJSDefine.Match(masked) {
 		return CJS
 	}
-	if (reIIFEWrapped.Match(masked) || reIIFEAssigned.Match(masked)) && reTrailingCall.Match(masked) {
+	if (reIIFEWrapped.Match(masked) || reIIFEAssigned.Match(masked)) && reTrailingCall.Match(tail) {
 		return IIFE
 	}
 	return Unknown
+}
+
+func tailBytes(src []byte, n int) []byte {
+	if len(src) <= n {
+		return src
+	}
+	return src[len(src)-n:]
 }
 
 // stripStringsAndComments removes the contents of string literals and
