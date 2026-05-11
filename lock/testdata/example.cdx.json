@@ -1,0 +1,179 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "pin",
+          "version": "0.1.0"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "pin:lockfile_version",
+        "value": "1"
+      },
+      {
+        "name": "pin:out",
+        "value": "internal/web/static/vendor"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/basecoat-css@0.3.11",
+      "name": "basecoat-css",
+      "version": "0.3.11",
+      "purl": "pkg:npm/basecoat-css@0.3.11",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "8a7b...tarball-hex"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/basecoat/basecoat"
+        }
+      ],
+      "components": [
+        {
+          "type": "file",
+          "bom-ref": "pkg:npm/basecoat-css@0.3.11#dist/basecoat.cdn.min.css",
+          "name": "dist/basecoat.cdn.min.css",
+          "hashes": [
+            {
+              "alg": "SHA-384",
+              "content": "c1d2...file-hex"
+            }
+          ],
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/basecoat.cdn.min.css"
+            }
+          ],
+          "properties": [
+            {
+              "name": "pin:out",
+              "value": "basecoat-css/basecoat.cdn.min.css"
+            },
+            {
+              "name": "pin:type",
+              "value": "style"
+            },
+            {
+              "name": "pin:size",
+              "value": "12345"
+            }
+          ]
+        },
+        {
+          "type": "file",
+          "bom-ref": "pkg:npm/basecoat-css@0.3.11#dist/js/all.min.js",
+          "name": "dist/js/all.min.js",
+          "hashes": [
+            {
+              "alg": "SHA-384",
+              "content": "e3f4...file-hex"
+            }
+          ],
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js"
+            }
+          ],
+          "properties": [
+            {
+              "name": "pin:out",
+              "value": "basecoat-css/all.min.js"
+            },
+            {
+              "name": "pin:type",
+              "value": "script"
+            },
+            {
+              "name": "pin:format",
+              "value": "iife"
+            },
+            {
+              "name": "pin:size",
+              "value": "8901"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/htmx.org@2.0.6",
+      "name": "htmx.org",
+      "version": "2.0.6",
+      "purl": "pkg:npm/htmx.org@2.0.6",
+      "licenses": [
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "5e6f...tarball-hex"
+        }
+      ],
+      "components": [
+        {
+          "type": "file",
+          "bom-ref": "pkg:npm/htmx.org@2.0.6#dist/htmx.min.js",
+          "name": "dist/htmx.min.js",
+          "hashes": [
+            {
+              "alg": "SHA-384",
+              "content": "a1b2...file-hex"
+            }
+          ],
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js"
+            }
+          ],
+          "properties": [
+            {
+              "name": "pin:out",
+              "value": "htmx.org/htmx.min.js"
+            },
+            {
+              "name": "pin:type",
+              "value": "script"
+            },
+            {
+              "name": "pin:format",
+              "value": "iife"
+            },
+            {
+              "name": "pin:size",
+              "value": "51007"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

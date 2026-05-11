@@ -16,3 +16,10 @@ linters:
     - ireturn
     - goconst
     - errcheck
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - goconst
+          - dupl
+          - mnd

@@ -1,0 +1,32 @@
+out: "internal/web/static/vendor"
+
+assets:
+  - name: "@tailwindcss/browser"
+    version: "4.3.0"
+
+  - name: "basecoat-css"
+    version: "0.3.11"
+    files:
+      - "dist/basecoat.cdn.min.css"
+      - "dist/js/all.min.js"
+
+  - name: "highlight.js"
+    version: "11.11.1"
+    source: "github:highlightjs/cdn-release"
+    files:
+      - "build/highlight.min.js"
+      - "build/styles/github.min.css"
+      - "build/styles/github-dark.min.css"
+
+  - name: "htmx-ext-sse"
+    version: "2.2.4"
+    files: ["sse.min.js"]
+
+  - name: "htmx.org"
+    version: "^2.0"
+    files: ["dist/htmx.min.js"]
+
+  - name: "lucide"
+    version: "0.545.0"
+    files: ["dist/umd/lucide.min.js"]
+    format: "umd"
