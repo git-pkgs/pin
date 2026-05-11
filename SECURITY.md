@@ -2,8 +2,8 @@
 
 This document lists the threats `pin` is designed to defend against,
 where each defence lives in the code, and the threats that are
-out of scope. It is paired with `SPEC.md` (lockfile schema) and the
-principles section in `.claude/DESIGN.md` (private to the maintainer).
+out of scope. The structured adversary-by-asset threat model lives in
+[THREAT_MODEL.md](THREAT_MODEL.md). Lockfile schema is in `SPEC.md`.
 
 ## Threat model in one paragraph
 

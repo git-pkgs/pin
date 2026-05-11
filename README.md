@@ -129,7 +129,7 @@ pin sync --verify-provenance
 
 `pin.lock` is a valid CycloneDX 1.6 SBOM. Each package becomes a `library` component with the registry tarball hash; each vendored file becomes a nested `file` component with its own SHA-384, the CDN URL, and pin-specific metadata under a `pin:` property namespace. Any CycloneDX consumer (Dependency-Track, GUAC, OSV-scanner, `git-pkgs sbom`) reads it directly. `serialNumber` and `metadata.timestamp` are deliberately omitted so re-runs are byte-stable and parallel branches don't conflict on the file.
 
-Schema is documented normatively in [SPEC.md](SPEC.md). Threat model and defences are in [SECURITY.md](SECURITY.md).
+Schema is documented normatively in [SPEC.md](SPEC.md). Defences are in [SECURITY.md](SECURITY.md); the structured adversary-by-asset model is in [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Integrity
 
