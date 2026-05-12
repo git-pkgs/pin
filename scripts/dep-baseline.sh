@@ -10,9 +10,19 @@
 #   ./scripts/dep-baseline.sh
 #
 # Commit the resulting changes alongside the go.mod / go.sum bump.
+#
+# Output is pinned to GOOS=linux GOARCH=amd64 + LC_ALL=C so the
+# baseline is reproducible from any local machine: build constraints
+# resolve the same way as the ubuntu-latest CI runner, and sort is
+# bytewise rather than locale-dependent (macOS vs Linux disagree
+# otherwise).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+export GOOS=linux
+export GOARCH=amd64
+export LC_ALL=C
 
 # Full module graph. go mod graph output is deterministic.
 go mod graph | sort > .github/dep-graph.txt

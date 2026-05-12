@@ -2,7 +2,6 @@ github.com/cespare/xxhash/v2: unsafe
 github.com/digitorus/pkcs7: os/exec
 github.com/go-openapi/swag/conv: unsafe
 github.com/go-openapi/swag/mangling: unsafe
-github.com/google/certificate-transparency-go/x509: os/exec
 github.com/in-toto/attestation/go/v1: unsafe
 github.com/in-toto/in-toto-golang/in_toto: os/exec
 github.com/in-toto/in-toto-golang/in_toto: syscall
@@ -19,8 +18,10 @@ golang.org/x/sys/unix: syscall
 golang.org/x/sys/unix: unsafe
 google.golang.org/grpc/binarylog/grpc_binarylog_v1: unsafe
 google.golang.org/grpc/health/grpc_health_v1: unsafe
-google.golang.org/grpc/internal: syscall
+google.golang.org/grpc/internal/channelz: syscall
 google.golang.org/grpc/internal/credentials: syscall
+google.golang.org/grpc/internal/syscall: syscall
+google.golang.org/grpc/internal: syscall
 google.golang.org/protobuf/internal/impl: unsafe
 google.golang.org/protobuf/internal/protolazy: unsafe
 google.golang.org/protobuf/internal/strs: unsafe
