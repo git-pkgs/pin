@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	pin "github.com/git-pkgs/pin"
@@ -28,7 +29,7 @@ func newOutdatedCmd() *cobra.Command {
 			} else {
 				const pad = 2
 				tw := tabwriter.NewWriter(out, 0, 0, pad, ' ', 0)
-				fmt.Fprintln(tw, "NAME\tLOCKED\tLATEST\tAGE\tSTATUS")
+				fmt.Fprintln(tw, "NAME\tLOCKED\tLATEST\tAGE\tSTATUS\tNOTES")
 				for _, r := range reports {
 					age := "-"
 					if r.AgeDays >= 0 {
@@ -38,7 +39,8 @@ func newOutdatedCmd() *cobra.Command {
 					if r.Deprecated != "" {
 						status = "deprecated: " + r.Deprecated
 					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Name, r.Locked, r.Latest, age, status)
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+						r.Name, r.Locked, r.Latest, age, status, notes(r))
 				}
 				_ = tw.Flush()
 			}
@@ -57,6 +59,23 @@ func newOutdatedCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 	cmd.Flags().BoolVar(&exitZero, "exit-zero", false, "exit 0 even if packages are behind")
 	return cmd
+}
+
+// notes formats the informational signals on an OutdatedReport that
+// don't fit into Severity: license drift, unmaintained packages, and
+// provenance gains/losses. Empty when there's nothing to say.
+func notes(r pin.OutdatedReport) string {
+	var ns []string
+	if r.LicenseChange {
+		ns = append(ns, fmt.Sprintf("license: %s → %s", r.LicenseLocked, r.LicenseLatest))
+	}
+	if r.Unmaintained {
+		ns = append(ns, "unmaintained")
+	}
+	if r.ProvenanceUpgrade {
+		ns = append(ns, "provenance available")
+	}
+	return strings.Join(ns, "; ")
 }
 
 func countAttention(reports []pin.OutdatedReport) int {

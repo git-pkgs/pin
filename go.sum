@@ -232,8 +232,12 @@ github.com/git-pkgs/registries v0.5.1 h1:UPE42CyZAsOfqO3N5bDelu28wS4Ifx/aOj0XZS4
 github.com/git-pkgs/registries v0.5.1/go.mod h1:BY0YW+V0WDGBMuDR2aSMR3NzOPFK4K+F3j6+ch+cq3M=
 github.com/git-pkgs/sbom v0.1.1 h1:f3Z8VAeb0VRsFOp48/erA4rrAPrV63JF6yBd90k2+WU=
 github.com/git-pkgs/sbom v0.1.1/go.mod h1:42YiJ+W9jBsPZnYJQs6tUlOtWlC0vDBOtND8TMwE8ek=
+github.com/git-pkgs/spdx v0.1.3 h1:YQou23mLfzbW//6JlHUuc5x1P5VNIIDSku5gvauf86I=
+github.com/git-pkgs/spdx v0.1.3/go.mod h1:4HGGWyC8tg4DjOhrtBTYl4Lu+5i2BFuauGX8zcVcYPg=
 github.com/git-pkgs/vers v0.2.5 h1:tDtUMik9Iw1lyPHdT5V6LXjLo9LsJc0xOawURz7ibQU=
 github.com/git-pkgs/vers v0.2.5/go.mod h1:biTbSQK1qdbrsxDEKnqe3Jzclxz8vW6uDcwKjfUGcOo=
+github.com/github/go-spdx/v2 v2.6.0 h1:Y/Chr7L8oG85Ilbzl11xkUSQFUfG1kGkLP18LyInvhg=
+github.com/github/go-spdx/v2 v2.6.0/go.mod h1:Ftc45YYG1WzpzwEPKRVm9Jv8vDqOrN4gWoCkK+bHer0=
 github.com/go-chi/chi v4.1.2+incompatible h1:fGFk2Gmi/YKXk0OmGfBh0WgmN3XB8lVnEyNz34tQRec=
 github.com/go-chi/chi/v5 v5.2.4 h1:WtFKPHwlywe8Srng8j2BhOD9312j9cGUxG1SP4V2cR4=
 github.com/go-chi/chi/v5 v5.2.4/go.mod h1:X7Gx4mteadT3eDOMTsXzmI4/rwUpOwBHLpAfupzFJP0=

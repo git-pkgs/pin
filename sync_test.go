@@ -576,6 +576,223 @@ assets:
 	}
 }
 
+// TestUpdate_FloatingRangeBumps asserts that `pin update` re-resolves
+// a floating range to the highest currently-satisfying version even
+// when the lockfile already has a (lower) satisfying version pinned.
+// `pin sync` without UpdateAll is lock-is-sticky and leaves the older
+// version in place.
+func TestUpdate_FloatingRangeBumps(t *testing.T) {
+	srv := twoVersionRegistry(t, "demo")
+	dir := t.TempDir()
+
+	// Start with an exact pin so the first sync locks at 1.0.0.
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["index.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, DefaultLock)
+	got, _ := os.ReadFile(lockPath)
+	if !strings.Contains(string(got), `pkg:npm/demo@1.0.0"`) {
+		t.Fatalf("first sync should lock at 1.0.0; lockfile:\n%s", got)
+	}
+
+	// Widen to a floating range. Plain Sync is sticky and keeps 1.0.0.
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "^1.0"
+    files: ["index.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(lockPath)
+	if !strings.Contains(string(got), `pkg:npm/demo@1.0.0"`) {
+		t.Errorf("plain Sync should keep 1.0.0 (lock-is-sticky); got:\n%s", got)
+	}
+
+	// UpdateAll bumps to the latest satisfying version.
+	if _, err := Sync(context.Background(), SyncOptions{
+		Dir: dir, RegistryURL: srv.URL, UpdateAll: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(lockPath)
+	if !strings.Contains(string(got), `pkg:npm/demo@1.5.0"`) {
+		t.Errorf("UpdateAll should bump to 1.5.0; lockfile:\n%s", got)
+	}
+}
+
+// twoVersionRegistry serves npm packument + version docs for {name}
+// at versions 1.0.0 and 1.5.0, with 1.5.0 as `latest`.
+func twoVersionRegistry(t *testing.T, name string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	tarballs := map[string][]byte{}
+	var sharedURL string
+	for _, v := range []string{"1.0.0", "1.5.0"} {
+		pj, _ := json.Marshal(map[string]any{"name": name, "version": v, "main": "index.js"})
+		tb := makeTarball(map[string]string{
+			"package.json": string(pj),
+			"index.js":     "module.exports='" + name + "@" + v + "'",
+		})
+		tarballs["/"+name+"/-/"+name+"-"+v+".tgz"] = tb
+		h := sha512.Sum512(tb)
+		integrity := "sha512-" + base64.StdEncoding.EncodeToString(h[:])
+		ver := v
+		mux.HandleFunc("/"+name+"/"+ver, func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name":    name,
+				"version": ver,
+				"dist":    map[string]any{"tarball": sharedURL + "/" + name + "/-/" + name + "-" + ver + ".tgz", "integrity": integrity},
+			})
+		})
+	}
+	mux.HandleFunc("/"+name, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name":      name,
+			"dist-tags": map[string]string{"latest": "1.5.0"},
+			"versions": map[string]any{
+				"1.0.0": map[string]any{"name": name, "version": "1.0.0"},
+				"1.5.0": map[string]any{"name": name, "version": "1.5.0"},
+			},
+		})
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if tb, ok := tarballs[r.URL.Path]; ok {
+			_, _ = w.Write(tb)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	srv := httptest.NewServer(mux)
+	sharedURL = srv.URL
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestUpdate_ExactPinIsNoOp asserts `pin update` against a manifest
+// with an exact-version pin is a no-op: the locked version stays at
+// the named version regardless of what's in the registry.
+func TestUpdate_ExactPinIsNoOp(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"index.js": "x"})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["index.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(filepath.Join(dir, DefaultLock))
+
+	if _, err := Sync(context.Background(), SyncOptions{
+		Dir: dir, RegistryURL: srv.URL, UpdateAll: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(filepath.Join(dir, DefaultLock))
+
+	if !bytes.Equal(first, second) {
+		t.Error("Update with an exact pin should be a no-op; lockfile changed")
+	}
+}
+
+// TestUpdate_NamedEntry exercises the Update slice path: only the
+// named entries re-resolve, others stay sticky.
+func TestUpdate_NamedEntry(t *testing.T) {
+	mux := http.NewServeMux()
+	tarballs := map[string][]byte{}
+	var sharedURL string
+	for _, name := range []string{"alpha", "beta"} {
+		for _, v := range []string{"1.0.0", "1.5.0"} {
+			pj, _ := json.Marshal(map[string]any{"name": name, "version": v, "main": "index.js"})
+			tb := makeTarball(map[string]string{
+				"package.json": string(pj),
+				"index.js":     "module.exports='" + name + "@" + v + "'",
+			})
+			tarballs["/"+name+"/-/"+name+"-"+v+".tgz"] = tb
+			h := sha512.Sum512(tb)
+			integrity := "sha512-" + base64.StdEncoding.EncodeToString(h[:])
+			n, ver := name, v
+			mux.HandleFunc("/"+n+"/"+ver, func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"name":    n,
+					"version": ver,
+					"dist":    map[string]any{"tarball": sharedURL + "/" + n + "/-/" + n + "-" + ver + ".tgz", "integrity": integrity},
+				})
+			})
+		}
+		n := name
+		mux.HandleFunc("/"+n, func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name":      n,
+				"dist-tags": map[string]string{"latest": "1.5.0"},
+				"versions": map[string]any{
+					"1.0.0": map[string]any{"name": n, "version": "1.0.0"},
+					"1.5.0": map[string]any{"name": n, "version": "1.5.0"},
+				},
+			})
+		})
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if tb, ok := tarballs[r.URL.Path]; ok {
+			_, _ = w.Write(tb)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	srv := httptest.NewServer(mux)
+	sharedURL = srv.URL
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	// Start with both at exact 1.0.0 to seed the lockfile.
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "alpha"
+    version: "1.0.0"
+    files: ["index.js"]
+  - name: "beta"
+    version: "1.0.0"
+    files: ["index.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	// Widen both to floating ranges. Sync stays sticky on both.
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "alpha"
+    version: "^1.0"
+    files: ["index.js"]
+  - name: "beta"
+    version: "^1.0"
+    files: ["index.js"]
+`)
+
+	// Update only "alpha"; beta stays at 1.0.0.
+	if _, err := Sync(context.Background(), SyncOptions{
+		Dir: dir, RegistryURL: srv.URL, Update: []string{"alpha"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, DefaultLock))
+	if !strings.Contains(string(got), `pkg:npm/alpha@1.5.0"`) {
+		t.Errorf("alpha should be bumped to 1.5.0; got:\n%s", got)
+	}
+	if !strings.Contains(string(got), `pkg:npm/beta@1.0.0"`) {
+		t.Errorf("beta should stay at 1.0.0 (not named in Update); got:\n%s", got)
+	}
+}
+
 func TestSyncDryRun(t *testing.T) {
 	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
 	dir := t.TempDir()

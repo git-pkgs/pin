@@ -8,8 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-pkgs/spdx"
 	"github.com/git-pkgs/vers"
 )
+
+// unmaintainedThreshold is the LastPublish age above which a package
+// is flagged as unmaintained in `pin outdated`. 365 days is a cold-
+// enough signal that an actively-maintained library wouldn't trip it
+// (most projects ship at least one patch a year), without flagging
+// stable-on-purpose libraries (which tend to ship in the 2-3 year
+// window). The threshold is informational, not a sync-blocker.
+const unmaintainedThresholdDays = 365
 
 // OutdatedOptions configures pin.Outdated / Client.Outdated.
 type OutdatedOptions struct {
@@ -33,6 +42,19 @@ type OutdatedReport struct {
 	Yanked              bool
 	ProvenanceDowngrade bool // locked had provenance, latest doesn't
 	ProvenanceUpgrade   bool // locked didn't, latest does
+
+	// LicenseLocked / LicenseLatest are the SPDX-normalised license
+	// strings for the locked and latest versions. LicenseChange is
+	// true when both are non-empty and normalised-differ — the user
+	// should re-evaluate license compatibility before bumping.
+	LicenseLocked string
+	LicenseLatest string
+	LicenseChange bool
+
+	// Unmaintained is true when the package's last publish (any
+	// version) is older than unmaintainedThresholdDays. Informational;
+	// does not affect Severity or OutdatedExitCode.
+	Unmaintained bool
 }
 
 const (
@@ -100,6 +122,8 @@ func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]Outdated
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", a.Name, err)
 		}
+		nLocked, nLatest := normaliseLicense(st.License), normaliseLicense(st.LatestLicense)
+		lastPublishAge := daysSince(st.LastPublish)
 		reports = append(reports, OutdatedReport{
 			Name:                a.Name,
 			Locked:              a.Version,
@@ -111,10 +135,29 @@ func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]Outdated
 			Yanked:              st.Yanked,
 			ProvenanceDowngrade: st.LockedHasProvenance && !st.LatestHasProvenance,
 			ProvenanceUpgrade:   !st.LockedHasProvenance && st.LatestHasProvenance,
+			LicenseLocked:       nLocked,
+			LicenseLatest:       nLatest,
+			LicenseChange:       nLocked != "" && nLatest != "" && nLocked != nLatest,
+			Unmaintained:        lastPublishAge > unmaintainedThresholdDays,
 		})
 	}
 	sort.Slice(reports, func(i, j int) bool { return reports[i].Name < reports[j].Name })
 	return reports, nil
+}
+
+// normaliseLicense runs the input through spdx's lax normaliser so two
+// equivalent expressions ("MIT License" vs "MIT") compare equal. On
+// any parser error the raw string is returned: the comparison falls
+// back to literal equality, which is still useful when both inputs
+// came from the same registry path.
+func normaliseLicense(s string) string {
+	if s == "" {
+		return ""
+	}
+	if out, err := spdx.NormalizeExpressionLax(s); err == nil {
+		return out
+	}
+	return s
 }
 
 func daysSince(iso string) int {

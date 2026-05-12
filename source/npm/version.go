@@ -82,6 +82,7 @@ type PackageStatus struct {
 	Deprecated          string
 	Yanked              bool
 	License             string
+	LatestLicense       string
 	LockedHasProvenance bool
 	LatestHasProvenance bool
 }
@@ -99,6 +100,7 @@ func (s *Source) Status(ctx context.Context, name, lockedVersion string) (*Packa
 	if st.Latest != "" {
 		st.LatestTime = doc.Time[st.Latest]
 		st.LatestHasProvenance = versionHasProvenance(doc.Versions[st.Latest])
+		st.LatestLicense = parseLicenseFromVersionDoc(doc.Versions[st.Latest])
 	}
 
 	raw, ok := doc.Versions[lockedVersion]
@@ -115,6 +117,22 @@ func (s *Source) Status(ctx context.Context, name, lockedVersion string) (*Packa
 	st.License = parseLicense(v.License)
 	st.LockedHasProvenance = versionHasProvenance(raw)
 	return st, nil
+}
+
+// parseLicenseFromVersionDoc extracts the license field from a raw npm
+// version document. Used by Status to surface the latest version's
+// license alongside the locked version's for license_change detection.
+func parseLicenseFromVersionDoc(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var v struct {
+		License json.RawMessage `json:"license"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return ""
+	}
+	return parseLicense(v.License)
 }
 
 func versionHasProvenance(raw json.RawMessage) bool {
