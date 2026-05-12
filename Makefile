@@ -30,6 +30,7 @@ fuzz:
 	go test -fuzz=FuzzRoundTrip -fuzztime=$(FUZZTIME) ./integrity/
 	go test -fuzz=FuzzIsSticky -fuzztime=$(FUZZTIME) ./source/npm/
 	go test -fuzz=FuzzFindSignature -fuzztime=$(FUZZTIME) ./source/npm/
+	go test -fuzz=FuzzSafeOut -fuzztime=$(FUZZTIME) .
 
 clean:
 	rm -rf bin/ dist/ coverage.out coverage.html
