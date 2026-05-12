@@ -15,6 +15,7 @@ import (
 	"github.com/git-pkgs/archives"
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
@@ -96,8 +97,33 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 		return nil, err
 	}
 
-	tarball, err := s.fetchTarball(ctx, meta.Dist.Tarball)
-	if err != nil {
+	// After the version document is in hand, the tarball fetch and the
+	// dist.attestations list fetch are independent network calls. Run
+	// them in parallel. Each goroutine writes exactly one named local
+	// variable; g.Wait below is the happens-before barrier for the
+	// reads that follow.
+	var tarball []byte
+	var att *source.Attestation
+	var attBundle []byte
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		tb, terr := s.fetchTarball(gctx, meta.Dist.Tarball)
+		if terr != nil {
+			return terr
+		}
+		tarball = tb
+		return nil
+	})
+	g.Go(func() error {
+		// Attestation fetch is supplementary metadata; a network
+		// failure here should not break sync. Match the previous
+		// behaviour (error discarded).
+		a, ab, _ := s.fetchAttestationWithBundle(gctx, json.RawMessage(metaRaw))
+		att = a
+		attBundle = ab
+		return nil
+	})
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -131,8 +157,6 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 	if err != nil {
 		return nil, fmt.Errorf("%s@%s: %w", name, version, err)
 	}
-
-	att, attBundle, _ := s.fetchAttestationWithBundle(ctx, json.RawMessage(metaRaw))
 
 	if att != nil && s.opts.Verifier != nil {
 		digest := sha512.Sum512(tarball)

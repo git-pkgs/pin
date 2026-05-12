@@ -9,11 +9,30 @@ import (
 	"strings"
 
 	"github.com/git-pkgs/purl"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/git-pkgs/pin/source/attestation"
 )
 
+// forgeFileConcurrency caps the per-entry parallelism for jsdelivr file
+// fetches inside a single forge resolve. Small enough that an outer
+// Sync with the default 8 entry concurrency doesn't fan out into
+// hundreds of CDN connections when several forge entries each list many
+// files.
+const forgeFileConcurrency = 4
+
 const fullSHALen = 40
+
+// fileFetch carries the result of one jsdelivr file fetch plus any
+// attestation lookup that fired off the same content. Each Goroutine
+// in resolveGitHub writes its own indexed slot, so there is no shared
+// state and the post-processing can pick the first non-nil attestation
+// by index for an order-deterministic result.
+type fileFetch struct {
+	rf     ResolvedFile
+	att    *Attestation
+	attRaw []byte
+}
 
 func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string) (*Resolved, error) {
 	owner, repo, ref := p.Namespace, p.Name, p.Version
@@ -22,33 +41,62 @@ func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string
 		return nil, err
 	}
 
-	resolved := make([]ResolvedFile, 0, len(files))
-	var attestation *Attestation
-	for _, path := range files {
-		url := fmt.Sprintf("%s/gh/%s/%s@%s/%s", strings.TrimRight(s.opts.JSDelivrCDN, "/"), owner, repo, sha, path)
-		body, err := s.http.GetBody(ctx, url)
-		if err != nil {
-			return nil, fmt.Errorf("%s/%s@%s: fetch %s: %w", owner, repo, ref, path, err)
-		}
-		resolved = append(resolved, ResolvedFile{
-			Path:      path,
-			Integrity: hashSRI384(body),
-			Size:      int64(len(body)),
-			URL:       url,
-			Content:   body,
+	fetches := make([]fileFetch, len(files))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(forgeFileConcurrency)
+	for i, path := range files {
+		g.Go(func() error {
+			url := fmt.Sprintf("%s/gh/%s/%s@%s/%s",
+				strings.TrimRight(s.opts.JSDelivrCDN, "/"), owner, repo, sha, path)
+			body, err := s.http.GetBody(gctx, url)
+			if err != nil {
+				return fmt.Errorf("%s/%s@%s: fetch %s: %w", owner, repo, ref, path, err)
+			}
+			att, raw := s.fetchGitHubAttestation(gctx, owner, repo, body)
+			fetches[i] = fileFetch{
+				rf: ResolvedFile{
+					Path:      path,
+					Integrity: hashSRI384(body),
+					Size:      int64(len(body)),
+					URL:       url,
+					Content:   body,
+				},
+				att:    att,
+				attRaw: raw,
+			}
+			return nil
 		})
-		if attestation == nil {
-			att, raw := s.fetchGitHubAttestation(ctx, owner, repo, body)
-			if att != nil {
-				if s.opts.Verifier != nil {
-					digest := sha256.Sum256(body)
-					if err := s.opts.Verifier.VerifyBundle(ctx, raw, "sha256", digest[:]); err != nil {
-						return nil, fmt.Errorf("%s/%s@%s: provenance verification failed for %s: %w", owner, repo, ref, path, err)
-					}
-				}
-				attestation = att
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Materialise the resolved-files slice in input order (slot writes
+	// are race-free; the goroutine fan-in via g.Wait establishes the
+	// happens-before for the reads here).
+	resolved := make([]ResolvedFile, len(files))
+	for i, f := range fetches {
+		resolved[i] = f.rf
+	}
+
+	// Pick the first attestation by file index. Same selection rule as
+	// the previous serial loop; with parallel fetches we walk the
+	// indexed slots rather than the natural iteration order so the
+	// result is independent of completion order.
+	var att *Attestation
+	for i, f := range fetches {
+		if f.att == nil {
+			continue
+		}
+		if s.opts.Verifier != nil {
+			digest := sha256.Sum256(f.rf.Content)
+			if err := s.opts.Verifier.VerifyBundle(ctx, f.attRaw, "sha256", digest[:]); err != nil {
+				return nil, fmt.Errorf("%s/%s@%s: provenance verification failed for %s: %w",
+					owner, repo, ref, files[i], err)
 			}
 		}
+		att = f.att
+		break
 	}
 
 	return &Resolved{
@@ -57,7 +105,7 @@ func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string
 		Version:          ref,
 		PackageIntegrity: sha,
 		SourceRepository: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
-		Attestation:      attestation,
+		Attestation:      att,
 		Files:            resolved,
 	}, nil
 }
