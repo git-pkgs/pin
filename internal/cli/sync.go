@@ -87,5 +87,6 @@ func newSyncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.VerifyProvenance, "verify-provenance", false, "cryptographically verify each sigstore attestation bundle against the live Sigstore TUF trust root")
 	cmd.Flags().StringVar(&sigMode, "signature-mode", "warn", "npm dist.signatures verification: warn (default), enforce, or off")
 	cmd.Flags().IntVar(&opts.Concurrency, "concurrency", 0, "cap on parallel resolves (0 = default of 8)")
+	cmd.Flags().BoolVar(&opts.NoFetch, "no-fetch", false, "cheap post-checkout assertion: frozen check + re-hash on-disk files against the lockfile, no network")
 	return cmd
 }

@@ -78,6 +78,8 @@ When `files:` is omitted for an npm source, `pin` reads the package's `package.j
 ```
 pin sync                       resolve manifest, fetch assets, write lockfile
 pin sync --frozen              fail before any network if manifest and lockfile disagree (CI)
+pin sync --no-fetch            --frozen plus re-hash on-disk files against the lockfile; no network, no writes
+pin sync --concurrency=N       cap parallel resolves (default 8)
 pin sync --dry-run [--json]    resolve and report, write nothing
 pin update [NAME...]           re-resolve to highest satisfying version, ignoring the lock
 pin verify [--strict] [--json] re-hash files on disk against the lockfile (exit 4 on drift)
@@ -98,6 +100,7 @@ pin sbom [-f spdx|cyclonedx-xml] [-o FILE]  emit the lockfile as an SBOM
 
 - **Cooldown on by default at 48 hours.** Most malicious npm versions are caught within 24 to 48 hours; the default-on `min_release_age` window blocks the majority of fresh-publish supply-chain attacks for free. Ranges fall back to the next-highest satisfying version outside the window; dist-tags fail with a clear error if `latest` is too fresh; exact pins bypass it (you named the version explicitly). Opt out with `min_release_age: 0` at the manifest top level or per entry.
 - **`--frozen` is the single CI safety flag.** It bails before any network if the manifest and lockfile disagree. No cleverness layered on top.
+- **`--no-fetch` is the cheap post-checkout assertion.** Same as `--frozen` plus a re-hash of every vendored file against the lockfile's recorded integrity. Designed for CI jobs that vendored at image-build time and want to assert nothing was tampered with after `git checkout`. No network, no writes.
 - **No silent lockfile mutation.** `sync` rewrites the lockfile only when the manifest changed.
 - **No code execution.** No install scripts, no hooks, no plugins. Stages 5 and 6 of [The Stages of Package Installation](https://nesbitt.io/2026/04/27/the-stages-of-package-installation.html) are absent.
 

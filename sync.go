@@ -89,6 +89,14 @@ type SyncOptions struct {
 	// file is written, so determinism is preserved regardless of how
 	// resolves interleave.
 	Concurrency int
+
+	// NoFetch is the CI cheap-assertion mode: implies Frozen (bail before
+	// any network if manifest and lockfile disagree) and additionally
+	// verifies that every vendored file on disk hashes to the integrity
+	// recorded in the lockfile. Designed for CI jobs that vendored at
+	// image-build time and just want to assert nothing was tampered with
+	// after checkout. No network, no writes.
+	NoFetch bool
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
@@ -120,11 +128,16 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 		return nil, err
 	}
 
+	prevVersions := lockedVersionsByName(prev)
+
+	if opts.NoFetch {
+		return syncNoFetch(opts, m, prev, prevVersions)
+	}
+
 	srcs, err := buildSources(opts)
 	if err != nil {
 		return nil, err
 	}
-	prevVersions := lockedVersionsByName(prev)
 
 	if opts.Frozen {
 		if err := checkFrozen(m, prev, prevVersions); err != nil {
@@ -195,6 +208,26 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	}
 
 	return &SyncResult{Lock: next, Changes: changes, Written: written, Removed: removed}, nil
+}
+
+// syncNoFetch implements --no-fetch: verify manifest and lockfile agree
+// (frozen-style), and re-hash every file under m.Out against the
+// lockfile's recorded integrity. No network, no writes.
+func syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) (*SyncResult, error) {
+	if prev == nil {
+		return nil, fmt.Errorf("--no-fetch: no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
+	}
+	if err := checkFrozen(m, prev, prevVersions); err != nil {
+		return nil, fmt.Errorf("--no-fetch: %w", err)
+	}
+	vr, err := Verify(VerifyOptions{Dir: opts.Dir, Lock: opts.Lock})
+	if err != nil {
+		return nil, fmt.Errorf("--no-fetch: %w", err)
+	}
+	if vr.Failed() {
+		return nil, fmt.Errorf("--no-fetch: %s", vr.Summary())
+	}
+	return &SyncResult{Lock: prev, Changes: lock.Diff(prev, prev)}, nil
 }
 
 type fileContent struct {

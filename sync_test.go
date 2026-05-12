@@ -330,6 +330,63 @@ func TestSyncConcurrencyDeterministic(t *testing.T) {
 	}
 }
 
+func TestSyncNoFetch(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+`)
+	// First seed the vendored files + lockfile with a normal sync.
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatalf("seed sync: %v", err)
+	}
+	srv.Close() // ensure --no-fetch cannot reach the registry
+
+	// Happy path: identical disk, identical lockfile, identical manifest.
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, NoFetch: true}); err != nil {
+		t.Errorf("--no-fetch on clean tree: %v", err)
+	}
+
+	// Tampered: an attacker edits a vendored file post-checkout. --no-fetch
+	// re-hashes and surfaces the drift.
+	if err := os.WriteFile(filepath.Join(dir, "v/demo/x.js"), []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, NoFetch: true}); err == nil {
+		t.Error("--no-fetch should fail when a vendored file was tampered with")
+	}
+}
+
+func TestSyncNoFetchManifestDrift(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	srv.Close()
+
+	// Manifest now references a version the lockfile doesn't have. --no-fetch
+	// must bail via the frozen check before any verification.
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "2.0.0"
+    files: ["dist/x.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, NoFetch: true}); err == nil {
+		t.Error("--no-fetch should fail when manifest drifts ahead of the lockfile")
+	}
+}
+
 func TestSyncDryRun(t *testing.T) {
 	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
 	dir := t.TempDir()
