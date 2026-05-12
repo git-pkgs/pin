@@ -46,7 +46,8 @@ func newVerifyCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&opts.Dir, "dir", "C", ".", "project directory")
 	cmd.Flags().StringVar(&opts.Lock, "lock", pin.DefaultLock, "lockfile path")
-	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "treat extra files as failures")
+	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "treat extra files as failures and re-derive each npm asset's hash from the registry tarball (slow; anchors the lockfile back to what npm published)")
+	cmd.Flags().StringVar(&opts.RegistryURL, "registry", "", "npm registry base URL (for --strict re-derive)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 	return cmd
 }

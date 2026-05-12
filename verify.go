@@ -1,6 +1,7 @@
 package pin
 
 import (
+	"context"
 	"crypto/sha512"
 	"encoding/base64"
 	"errors"
@@ -11,12 +12,17 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/git-pkgs/pin/lock"
+	"github.com/git-pkgs/pin/source/npm"
+	"github.com/git-pkgs/purl"
 )
 
 type VerifyOptions struct {
-	Dir    string
-	Lock   string
-	Strict bool
+	Dir         string
+	Lock        string
+	Strict      bool
+	RegistryURL string
 }
 
 type VerifyResult struct {
@@ -76,10 +82,77 @@ func Verify(opts VerifyOptions) (*VerifyResult, error) {
 	}
 	res.Extra = extra
 
+	if opts.Strict {
+		drifts, err := verifyStrictNPM(l, opts.RegistryURL)
+		if err != nil {
+			return nil, err
+		}
+		res.Drifted = append(res.Drifted, drifts...)
+	}
+
 	sort.Strings(res.OK)
 	sort.Strings(res.Missing)
 	sort.Strings(res.Extra)
 	return res, nil
+}
+
+// verifyStrictNPM re-fetches each npm package's tarball from the registry,
+// re-extracts the files the lockfile claims, and compares the derived
+// per-file SHA-384 to the recorded integrity. Mismatches indicate either
+// a tampered lockfile or an upstream that re-published the same version
+// with different bytes (npm does not permit this, so it's a hard failure).
+//
+// forge and url sources are skipped: their per-file SHA-384 IS the
+// anchor (no separate tarball to re-derive from), so the standard
+// on-disk verify already provides equivalent assurance.
+func verifyStrictNPM(l *lock.Lock, registryURL string) ([]Drift, error) {
+	src := npm.New(npm.Options{RegistryURL: registryURL, SignatureMode: npm.SignatureModeOff})
+
+	byPkg := map[string][]lock.Asset{}
+	var keys []string
+	for _, a := range l.Assets {
+		if !strings.HasPrefix(a.PURL, "pkg:npm/") {
+			continue
+		}
+		if _, seen := byPkg[a.PURL]; !seen {
+			keys = append(keys, a.PURL)
+		}
+		byPkg[a.PURL] = append(byPkg[a.PURL], a)
+	}
+	sort.Strings(keys)
+
+	var drifts []Drift
+	ctx := context.Background()
+	for _, key := range keys {
+		assets := byPkg[key]
+		p, err := purl.Parse(key)
+		if err != nil {
+			return nil, fmt.Errorf("parse purl %q: %w", key, err)
+		}
+		paths := make([]string, len(assets))
+		for i, a := range assets {
+			paths[i] = a.Path
+		}
+		resolved, err := src.Resolve(ctx, p, paths)
+		if err != nil {
+			return nil, fmt.Errorf("re-derive %s: %w", key, err)
+		}
+		derived := map[string]string{}
+		for _, f := range resolved.Files {
+			derived[f.Path] = f.Integrity
+		}
+		for _, a := range assets {
+			got, ok := derived[a.Path]
+			if !ok {
+				drifts = append(drifts, Drift{Out: a.Out, Expected: a.Integrity, Actual: "<not in tarball>"})
+				continue
+			}
+			if got != a.Integrity {
+				drifts = append(drifts, Drift{Out: a.Out, Expected: a.Integrity, Actual: got})
+			}
+		}
+	}
+	return drifts, nil
 }
 
 func hashFile(path string) (string, error) {
