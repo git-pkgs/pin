@@ -46,7 +46,6 @@ type Entry struct {
 type Trust struct {
 	RequireProvenance                 *bool    `yaml:"require_provenance"`
 	RequirePublisherMatchesRepository *bool    `yaml:"require_publisher_matches_repository"`
-	TrustedIssuers                    []string `yaml:"trusted_issuers"`
 	TrustedWorkflows                  []string `yaml:"trusted_workflows"`
 }
 
@@ -67,7 +66,6 @@ func (m *Manifest) EffectiveTrust(e *Entry) Trust {
 	if e.Trust.RequirePublisherMatchesRepository != nil {
 		out.RequirePublisherMatchesRepository = e.Trust.RequirePublisherMatchesRepository
 	}
-	out.TrustedIssuers = mergeUnique(out.TrustedIssuers, e.Trust.TrustedIssuers)
 	out.TrustedWorkflows = mergeUnique(out.TrustedWorkflows, e.Trust.TrustedWorkflows)
 	return out
 }
