@@ -184,20 +184,60 @@ A writer SHOULD skip writing the file when the new bytes would be
 identical to the existing file on disk, so the file's mtime stays
 stable.
 
-## Reserved fields
+## Provenance properties
 
-The following fields are reserved for future schema versions and MUST NOT
-appear at schema version 1. A v1 writer MUST NOT emit them; a v1 reader
-encountering them in a higher-version lockfile follows the forward-compat
-rules below.
+When the resolved version carried a SLSA Provenance v1 attestation
+(npm `dist.attestations`, GitHub artifact attestation, or any other
+source-specific attestation channel), the library component MAY carry
+the following `pin:` properties capturing the attestation's identity
+fields:
 
-- On `library` components: an `attestation` object carrying SLSA
-  Provenance / sigstore bundle pointers (`predicate_type`, `builder_id`,
-  `source_repository`, `source_revision`, `signer_identity`,
-  `transparency_log`). Reserved for the provenance verification work; see
-  [Could lockfiles just be SBOMs?][cl] for the motivation.
+- `pin:attestation.predicate_type` — full URI of the predicate type
+  (`https://slsa.dev/provenance/v1` in practice).
+- `pin:attestation.builder_id` — `runDetails.builder.id` from the
+  in-toto statement. For GitHub-Actions-built packages this is the
+  workflow URL.
+- `pin:attestation.source_repository` — the repository the attestation
+  claims the build was driven from. Compare against the library
+  component's `externalReferences[type=vcs]` for the
+  publisher-matches-repository check.
+- `pin:attestation.source_revision` — commit SHA the attestation
+  claims as the build input.
+- `pin:attestation.signer_identity` — the Fulcio certificate's
+  subject URI or email.
+
+The library component MAY additionally carry an
+`externalReferences[type=attestation]` pointing at the bundle URL.
+
+These properties are informational metadata: cryptographic verification
+of the underlying sigstore bundle requires the live bundle bytes from
+the registry, not what the lockfile records. The lockfile records *that*
+an attestation existed at sync time and *what it claimed*; verification
+against the trust root happens at sync time when `--verify-provenance`
+is set.
+
+See [Could lockfiles just be SBOMs?][cl] for the motivation.
 
 [cl]: https://nesbitt.io/2025/12/23/could-lockfiles-just-be-sboms.html
+
+## Lockfile compatibility across pin versions
+
+Lockfiles written by older pin binaries are forward-compatible:
+
+- A v0.1 lockfile has no `pin:attestation.*` properties even when the
+  underlying npm version had a SLSA attestation available at the time.
+  Under `--strict-provenance`, every v0.1 lockfile entry is treated as
+  "no attestation" — i.e., `--strict-provenance` will fail until the
+  user re-runs `pin sync` against the same manifest with a newer pin
+  binary. The re-sync rewrites the lockfile with the attestation
+  properties for any version that carries one upstream.
+- A pin v0.1 binary reading a lockfile with `pin:attestation.*`
+  properties tolerates them as unknown additive content per the
+  forward-compat rule below.
+
+In practice, the migration story is "bump pin, run `pin sync` once,
+commit the rewritten lockfile". No flag day, no schema-version bump,
+no breaking change to `pin.lock`.
 
 ## Forward compatibility
 

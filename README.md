@@ -103,13 +103,13 @@ pin sbom [-f spdx|cyclonedx-xml] [-o FILE]  emit the lockfile as an SBOM
 
 ## Provenance and trusted publishing
 
-For npm sources, when the publisher used trusted publishing, `pin sync` records the SLSA Provenance v1 attestation in the lockfile: `builder_id` (the CI workflow URI), `source_repository`, `source_revision`, `signer_identity` (the OIDC SAN), and the bundle URL.
+For npm and GitHub forge sources, when the publisher used trusted publishing, `pin sync` records the SLSA Provenance v1 attestation in the lockfile: `builder_id` (the CI workflow URI), `source_repository`, `source_revision`, `signer_identity` (the OIDC SAN), and the bundle URL.
 
 Three opt-in flags layer the trust assertion:
 
 ```
 pin sync --strict-provenance
-   fail if any npm entry resolves to a version with no attestation.
+   fail if any entry resolves to a version with no attestation.
 
 pin sync --require-publisher-matches-repository
    fail if an attestation's source repository differs from the package's declared
@@ -120,10 +120,36 @@ pin sync --require-publisher-matches-repository
 pin sync --verify-provenance
    cryptographically verify the sigstore bundle against the live Sigstore TUF
    trust root: Fulcio cert chain, Rekor inclusion proof, DSSE signature,
-   subject digest matches the fetched tarball. Composes with the other two.
+   subject digest matches the fetched artifact. Composes with the other two.
+   Trust root is cached at $XDG_CACHE_HOME/pin/sigstore-tuf/ after first use.
+
+pin sync --signature-mode {warn|enforce|off}
+   verify npm dist.signatures (ECDSA P-256 over {name}@{version}:{integrity},
+   keys fetched from /-/npm/v1/keys). warn (default) fails on bad sigs but
+   tolerates absent ones; enforce additionally fails on absent.
 ```
 
+The flags are per-invocation. The persistent form is a manifest `trust:` block, top-level or per-entry:
+
+```yaml
+trust:
+  require_provenance: true
+  require_publisher_matches_repository: true
+  trusted_workflows:
+    - https://github.com/builder-org/builder/.github/workflows/release.yml
+
+assets:
+  - name: monorepo-pkg
+    version: ^1.0.0
+    trust:
+      require_publisher_matches_repository: false   # entry-level override
+```
+
+`trusted_workflows` is the escape hatch for monorepo packages whose legitimate build workflow lives on a different repo than the package's declared `repository.url`. CLI flags always win over manifest entries: `--strict-provenance` forces the check even on an entry that opted out.
+
 `pin outdated` flags a `provenance-downgrade` severity (above deprecated, below yanked) when the locked version had an attestation and the latest doesn't. That's the signal that trusted publishing was switched off by the maintainer or by whoever now controls the publish token.
+
+**Upgrading a lockfile across pin versions.** Lockfiles written by pre-v0.2 pin binaries have no `pin:attestation.*` properties even when the underlying version had a SLSA attestation available. Under `--strict-provenance`, every such entry is treated as "no attestation" — `pin sync` once with a newer binary rewrites the lockfile with the attestation properties for any version that carries one upstream. No flag day, no schema bump.
 
 ## Lockfile
 
