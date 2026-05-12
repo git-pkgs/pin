@@ -1,6 +1,6 @@
 //go:build smoke
 
-package sigstoreverifier
+package sigstore
 
 import (
 	"context"

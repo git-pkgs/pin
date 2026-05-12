@@ -1,4 +1,4 @@
-// Package sigstoreverifier is the default source.ProvenanceVerifier
+// Package sigstore is the default source.ProvenanceVerifier
 // implementation: it validates a sigstore bundle against the live (or
 // cached) Sigstore TUF trust root via sigstore-go. Handles both npm
 // (subject = sha512(tarball)) and GitHub artifact (subject = sha256(file))
@@ -8,7 +8,11 @@
 // and in-toto-plain verifiers can sit beside this one as separate
 // implementations of source.ProvenanceVerifier without touching the
 // npm or forge fetch paths.
-package sigstoreverifier
+//
+// The package has no pin-specific dependencies — it imports sigstore-go
+// and the source.ProvenanceVerifier interface only. Lift it into its
+// own module without behaviour change.
+package sigstore
 
 import (
 	"context"

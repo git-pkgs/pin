@@ -15,7 +15,7 @@ import (
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
-	"github.com/git-pkgs/pin/source/sigstoreverifier"
+	"github.com/git-pkgs/pin/source/sigstore"
 )
 
 // ClientOptions configures a Client. All fields are optional; zero
@@ -178,7 +178,7 @@ func clientFromSyncOptions(opts SyncOptions) (*Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("--verify-provenance: load Sigstore trust root: %w", err)
 		}
-		co.Verifier = sigstoreverifier.New(tr)
+		co.Verifier = sigstore.New(tr)
 	}
 	return New(co), nil
 }

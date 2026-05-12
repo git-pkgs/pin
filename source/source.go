@@ -98,7 +98,7 @@ type ResolvedFile struct {
 //
 // Implementations:
 //
-//   - source/sigstoreverifier — sigstore-go via Sigstore's TUF trust
+//   - source/sigstore — sigstore-go via Sigstore's TUF trust
 //     root. The default; handles both npm tarball (sha512) and GitHub
 //     artifact (sha256) attestations.
 //
