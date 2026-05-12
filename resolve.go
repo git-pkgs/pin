@@ -42,7 +42,11 @@ func (c *Client) resolveEntry(ctx context.Context, m *manifest.Manifest, e *mani
 }
 
 func (c *Client) resolveURLEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry) ([]lock.Asset, []fileContent, error) {
-	resolved, err := c.URL.Resolve(ctx, e.PURL(e.Version), nil)
+	resolver := c.resolvers["generic"]
+	if resolver == nil {
+		return nil, nil, fmt.Errorf("%s: no resolver registered for purl type %q", e.Name, "generic")
+	}
+	resolved, err := resolver.Resolve(ctx, e.PURL(e.Version), nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -86,7 +90,11 @@ func (c *Client) resolveNPMEntry(ctx context.Context, m *manifest.Manifest, e *m
 		version = v
 	}
 
-	resolved, err := c.NPM.Resolve(ctx, e.PURL(version), e.Files)
+	resolver := c.resolvers["npm"]
+	if resolver == nil {
+		return nil, nil, fmt.Errorf("%s: no resolver registered for purl type %q", e.Name, "npm")
+	}
+	resolved, err := resolver.Resolve(ctx, e.PURL(version), e.Files)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -140,7 +148,12 @@ func toLockAttestation(a *source.Attestation) *lock.Attestation {
 }
 
 func (c *Client) resolveForgeEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry, _ manifest.Source) ([]lock.Asset, []fileContent, error) {
-	resolved, err := c.Forge.Resolve(ctx, e.PURL(e.Version), e.Files)
+	p := e.PURL(e.Version)
+	resolver := c.resolvers[p.Type]
+	if resolver == nil {
+		return nil, nil, fmt.Errorf("%s: no resolver registered for purl type %q", e.Name, p.Type)
+	}
+	resolved, err := resolver.Resolve(ctx, p, e.Files)
 	if err != nil {
 		return nil, nil, err
 	}

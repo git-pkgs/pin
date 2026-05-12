@@ -1,10 +1,28 @@
-// Package source defines the common Resolver interface that every source
-// kind (npm, github, gitlab, ...) implements. Identity is purl-driven: a
-// resolver takes a *purl.PURL and the requested file paths, fetches the
-// bytes, anchors integrity, and returns the resolved metadata.
+// Package source defines the common Resolver interface every source
+// kind (npm, github, gitlab, ipfs, internal artifact registries, ...)
+// implements. Identity is purl-driven: a resolver takes a *purl.PURL
+// and the requested file paths, fetches the bytes, anchors integrity,
+// and returns the resolved metadata.
 //
-// Adding a new source kind is one new sub-package implementing Resolver
-// plus one line in sync.go's dispatch map.
+// Adding a new source kind to a pin Client:
+//
+//  1. Implement source.Resolver. The single Resolve method receives a
+//     purl and the file list the manifest requested.
+//
+//  2. Register the resolver against the purl type at Client setup:
+//
+//     c := pin.New(pin.ClientOptions{})
+//     c.RegisterResolver("ipfs", myIPFSResolver)
+//
+//     Manifest entries whose purl type matches dispatch to that
+//     resolver. Built-in resolvers (npm, github, generic) are
+//     registered by pin.New and can be replaced by re-registering the
+//     same purl type.
+//
+// Plug-in resolvers populate whichever Resolved/ResolvedFile fields
+// they have available and leave the rest zero. The pin core treats
+// missing optional fields (License, Attestation, SourceRepository,
+// URL on a file, etc.) as "unknown" rather than errors.
 package source
 
 import (
@@ -22,10 +40,24 @@ type Resolver interface {
 	Resolve(ctx context.Context, p *purl.PURL, files []string) (*Resolved, error)
 }
 
-// Resolved is the unified output of a Resolver. PackageIntegrity holds
-// whatever the source treats as its tarball-level anchor: an SRI string
-// for npm (sha512-<base64> of the tarball), a commit SHA for forge sources
-// (SHA-1 hex of the resolved commit), or a TOFU SRI for url sources.
+// Resolved is the unified output of a Resolver.
+//
+// Required fields a plug-in resolver MUST populate:
+//
+//	PURL    — the canonical purl of the resolved package, version-pinned
+//	Name    — display name (may equal the purl's Name)
+//	Version — the resolved exact version string
+//	Files   — the fetched files; at least one entry, each with Path,
+//	          Integrity, Size, and Content populated
+//
+// Optional fields a plug-in resolver MAY populate:
+//
+//	PackageIntegrity — source-specific package-level anchor (npm: sha512
+//	          SRI of the tarball; forge: commit SHA; url: SHA-384 SRI)
+//	License          — SPDX or registry-supplied license string
+//	SourceRepository — the package's declared repository URL
+//	Attestation      — SLSA Provenance v1 fields when the version was
+//	          built with trusted publishing
 type Resolved struct {
 	PURL             string
 	Name             string
