@@ -9,16 +9,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/git-pkgs/pin/cdn"
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
-	"github.com/git-pkgs/pin/sniff"
-	"github.com/git-pkgs/pin/source"
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
@@ -230,11 +226,6 @@ func syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.Lock, prevVe
 	return &SyncResult{Lock: prev, Changes: lock.Diff(prev, prev)}, nil
 }
 
-type fileContent struct {
-	out     string
-	content []byte
-}
-
 // safeOut returns an error if any joined path component would let a
 // vendored file escape the project's out directory. Defence in depth:
 // the manifest validates files: paths and slugs are built from sanitised
@@ -303,165 +294,6 @@ func pinTUFCachePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "pin", "sigstore-tuf"), nil
-}
-
-func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
-	src := e.Source()
-	switch src.Kind {
-	case manifest.SourceNPM:
-		return resolveNPMEntry(ctx, srcs.npm, m, e, lockedVersion)
-	case manifest.SourceForge:
-		return resolveForgeEntry(ctx, srcs.forge, m, e, src)
-	case manifest.SourceURL:
-		return resolveURLEntry(ctx, srcs.rawurl, m, e)
-	default:
-		return nil, nil, fmt.Errorf("%s: source kind %q not supported in this build", e.Name, src.Kind)
-	}
-}
-
-func resolveURLEntry(ctx context.Context, src *rawurl.Source, m *manifest.Manifest, e *manifest.Entry) ([]lock.Asset, []fileContent, error) {
-	resolved, err := src.Resolve(ctx, e.PURL(e.Version), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	slug := e.Slug()
-	assets := make([]lock.Asset, 0, len(resolved.Files))
-	files := make([]fileContent, 0, len(resolved.Files))
-
-	for _, f := range resolved.Files {
-		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
-		assetType := lock.ClassifyType(f.Path)
-		format := e.Format
-		if format == "" && assetType == lock.TypeScript {
-			format = sniff.Format(f.Content)
-		}
-		assets = append(assets, lock.Asset{
-			Name:             e.Name,
-			Version:          resolved.Version,
-			PURL:             resolved.PURL,
-			Type:             string(assetType),
-			Format:           format,
-			Path:             f.Path,
-			Out:              out,
-			URL:              f.URL,
-			Integrity:        f.Integrity,
-			Size:             f.Size,
-			PackageIntegrity: f.Integrity,
-		})
-		files = append(files, fileContent{out: out, content: f.Content})
-	}
-	return assets, files, nil
-}
-
-func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
-	version := lockedVersion
-	if !npm.IsSticky(lockedVersion, e.Version) {
-		v, err := src.ResolveVersion(ctx, e.Name, e.Version, m.EffectiveMinReleaseAge(e))
-		if err != nil {
-			return nil, nil, err
-		}
-		version = v
-	}
-
-	resolved, err := src.Resolve(ctx, e.PURL(version), e.Files)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	slug := e.Slug()
-	assets := make([]lock.Asset, 0, len(resolved.Files))
-	files := make([]fileContent, 0, len(resolved.Files))
-
-	att := toLockAttestation(resolved.Attestation)
-
-	for _, f := range resolved.Files {
-		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
-		assetType := lock.ClassifyType(f.Path)
-		format := e.Format
-		if format == "" && assetType == lock.TypeScript {
-			format = sniff.Format(f.Content)
-		}
-		assets = append(assets, lock.Asset{
-			Name:             resolved.Name,
-			Version:          resolved.Version,
-			PURL:             resolved.PURL,
-			Type:             string(assetType),
-			Format:           format,
-			Path:             f.Path,
-			Out:              out,
-			URL:              cdn.NPMFileURL(cdn.JSDelivr, resolved.Name, resolved.Version, f.Path),
-			Integrity:        f.Integrity,
-			Size:             f.Size,
-			PackageIntegrity: resolved.PackageIntegrity,
-			License:          resolved.License,
-			SourceRepository: resolved.SourceRepository,
-			Attestation:      att,
-		})
-		files = append(files, fileContent{out: out, content: f.Content})
-	}
-	return assets, files, nil
-}
-
-func toLockAttestation(a *source.Attestation) *lock.Attestation {
-	if a == nil {
-		return nil
-	}
-	return &lock.Attestation{
-		PredicateType:    a.PredicateType,
-		BuilderID:        a.BuilderID,
-		SourceRepository: a.SourceRepository,
-		SourceRevision:   a.SourceRevision,
-		SignerIdentity:   a.SignerIdentity,
-		BundleURL:        a.BundleURL,
-	}
-}
-
-func resolveForgeEntry(ctx context.Context, src *forge.Source, m *manifest.Manifest, e *manifest.Entry, _ manifest.Source) ([]lock.Asset, []fileContent, error) {
-	resolved, err := src.Resolve(ctx, e.PURL(e.Version), e.Files)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	slug := e.Slug()
-	assets := make([]lock.Asset, 0, len(resolved.Files))
-	files := make([]fileContent, 0, len(resolved.Files))
-
-	att := toLockAttestation(resolved.Attestation)
-
-	for _, f := range resolved.Files {
-		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
-		assetType := lock.ClassifyType(f.Path)
-		format := e.Format
-		if format == "" && assetType == lock.TypeScript {
-			format = sniff.Format(f.Content)
-		}
-		assets = append(assets, lock.Asset{
-			Name:             e.Name,
-			Version:          resolved.Version,
-			PURL:             resolved.PURL,
-			Type:             string(assetType),
-			Format:           format,
-			Path:             f.Path,
-			Out:              out,
-			URL:              f.URL,
-			Integrity:        f.Integrity,
-			Size:             f.Size,
-			PackageIntegrity: resolved.PackageIntegrity,
-			SourceRepository: resolved.SourceRepository,
-			Attestation:      att,
-		})
-		files = append(files, fileContent{out: out, content: f.Content})
-	}
-	return assets, files, nil
-}
-
-func outputPath(layout manifest.Layout, slug, version, packagePath string) string {
-	base := path.Base(packagePath)
-	if layout == manifest.LayoutFlat {
-		return slug + "-" + version + "-" + base
-	}
-	return slug + "/" + base
 }
 
 func writeFiles(dir, outDir string, files []fileContent) ([]string, error) {
@@ -542,95 +374,6 @@ func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]
 		}
 	}
 	return nil
-}
-
-// enforceTrust applies the manifest trust block plus CLI overrides
-// (--strict-provenance, --require-publisher-matches-repository) to each
-// entry. Per-entry trust overrides the manifest top level; CLI flags
-// override both (you can't opt an entry out of a flag-forced policy).
-// trusted_workflows is additive: any workflow URI listed there satisfies
-// the publisher-matches-repository check even when the package's
-// repository.url disagrees.
-func enforceTrust(m *manifest.Manifest, l *lock.Lock, opts SyncOptions) error {
-	entryByName := map[string]*manifest.Entry{}
-	for i := range m.Assets {
-		entryByName[m.Assets[i].Name] = &m.Assets[i]
-	}
-
-	var missing, mismatches []string
-	seen := map[string]bool{}
-	for _, a := range l.Assets {
-		if seen[a.Name] {
-			continue
-		}
-		seen[a.Name] = true
-
-		t := manifest.Trust{}
-		if e := entryByName[a.Name]; e != nil {
-			t = m.EffectiveTrust(e)
-		}
-		if opts.StrictProvenance {
-			yes := true
-			t.RequireProvenance = &yes
-		}
-		if opts.RequirePublisherMatchesRepository {
-			yes := true
-			t.RequirePublisherMatchesRepository = &yes
-		}
-
-		if manifest.BoolValue(t.RequireProvenance) && strings.HasPrefix(a.PURL, "pkg:npm/") && a.Attestation == nil {
-			missing = append(missing, a.Name+"@"+a.Version)
-		}
-
-		if manifest.BoolValue(t.RequirePublisherMatchesRepository) && a.Attestation != nil {
-			if msg := publisherMismatch(&a, t.TrustedWorkflows); msg != "" {
-				mismatches = append(mismatches, msg)
-			}
-		}
-	}
-
-	if len(missing) > 0 {
-		return fmt.Errorf("require_provenance: no attestation recorded for: %s", strings.Join(missing, ", "))
-	}
-	if len(mismatches) > 0 {
-		return fmt.Errorf("require_publisher_matches_repository: %s", strings.Join(mismatches, "; "))
-	}
-	return nil
-}
-
-// publisherMismatch returns the error message when the attestation's
-// source repository doesn't match the package's declared repository,
-// or empty when it does or the trusted_workflows allowlist permits it.
-func publisherMismatch(a *lock.Asset, trustedWorkflows []string) string {
-	want := normaliseRepoURL(a.SourceRepository)
-	got := normaliseRepoURL(a.Attestation.SourceRepository)
-	if want == "" || got == "" || want == got {
-		return ""
-	}
-	for _, wf := range trustedWorkflows {
-		if a.Attestation.BuilderID == wf || strings.HasPrefix(a.Attestation.BuilderID, wf+"@") {
-			return ""
-		}
-	}
-	return fmt.Sprintf("%s@%s: attestation built from %s but package.json says %s", a.Name, a.Version, got, want)
-}
-
-// normaliseRepoURL strips scheme, trailing .git, trailing slash, and
-// github-style subpaths (`/tree/<branch>/<path>`, `/blob/...`) so two
-// URLs pointing at the same repo compare equal even when one references
-// a subdirectory within a monorepo.
-func normaliseRepoURL(u string) string {
-	u = strings.TrimSuffix(u, "/")
-	u = strings.TrimSuffix(u, ".git")
-	u = strings.TrimPrefix(u, "https://")
-	u = strings.TrimPrefix(u, "http://")
-	u = strings.ToLower(u)
-	for _, sep := range []string{"/tree/", "/blob/"} {
-		if i := strings.Index(u, sep); i >= 0 {
-			u = u[:i]
-		}
-	}
-	return u
 }
 
 func lockedVersionsByName(l *lock.Lock) map[string]string {
