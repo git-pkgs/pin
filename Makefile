@@ -25,6 +25,11 @@ fuzz:
 	go test -fuzz=FuzzParse -fuzztime=$(FUZZTIME) ./source/attestation/
 	go test -fuzz=FuzzRead -fuzztime=$(FUZZTIME) ./manifest/
 	go test -fuzz=FuzzRead -fuzztime=$(FUZZTIME) ./lock/
+	go test -fuzz=FuzzFormat -fuzztime=$(FUZZTIME) ./sniff/
+	go test -fuzz=FuzzParseSRI -fuzztime=$(FUZZTIME) ./integrity/
+	go test -fuzz=FuzzRoundTrip -fuzztime=$(FUZZTIME) ./integrity/
+	go test -fuzz=FuzzIsSticky -fuzztime=$(FUZZTIME) ./source/npm/
+	go test -fuzz=FuzzFindSignature -fuzztime=$(FUZZTIME) ./source/npm/
 
 clean:
 	rm -rf bin/ dist/ coverage.out coverage.html

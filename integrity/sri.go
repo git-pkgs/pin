@@ -8,10 +8,18 @@ import (
 	"strings"
 )
 
+// CycloneDX hash-algorithm names, the mirror of the SRI algorithm
+// prefixes (sha256/384/512).
+const (
+	CDXSHA256 = "SHA-256"
+	CDXSHA384 = "SHA-384"
+	CDXSHA512 = "SHA-512"
+)
+
 var sriAlgToCDX = map[string]string{
-	"sha256": "SHA-256",
-	"sha384": "SHA-384",
-	"sha512": "SHA-512",
+	"sha256": CDXSHA256,
+	"sha384": CDXSHA384,
+	"sha512": CDXSHA512,
 }
 
 // ParseSRI decodes a Subresource Integrity string ("sha384-<base64>") into a
