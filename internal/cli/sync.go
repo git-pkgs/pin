@@ -5,6 +5,7 @@ import (
 	"os"
 
 	pin "github.com/git-pkgs/pin"
+	"github.com/git-pkgs/pin/source/npm"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,7 @@ func detectCI() string {
 func newSyncCmd() *cobra.Command {
 	var opts pin.SyncOptions
 	var jsonOut bool
+	var sigMode string
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Resolve manifest, fetch assets, write lockfile",
@@ -33,6 +35,16 @@ func newSyncCmd() *cobra.Command {
 				if ci := detectCI(); ci != "" {
 					fmt.Fprintf(cmd.ErrOrStderr(), "note: %s is set; consider --frozen so a stale lockfile fails the build instead of being silently re-resolved\n", ci)
 				}
+			}
+			switch sigMode {
+			case "warn", "":
+				opts.SignatureMode = npm.SignatureModeWarn
+			case "enforce":
+				opts.SignatureMode = npm.SignatureModeEnforce
+			case "off":
+				opts.SignatureMode = npm.SignatureModeOff
+			default:
+				return fmt.Errorf("--signature-mode must be warn, enforce, or off (got %q)", sigMode)
 			}
 			res, err := pin.Sync(cmd.Context(), opts)
 			if err != nil {
@@ -73,5 +85,6 @@ func newSyncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.StrictProvenance, "strict-provenance", false, "fail if any npm entry resolves to a version with no attestation")
 	cmd.Flags().BoolVar(&opts.RequirePublisherMatchesRepository, "require-publisher-matches-repository", false, "fail if an attestation's build workflow lives on a different repository than the package's declared repository.url (catches leaked-token attacks)")
 	cmd.Flags().BoolVar(&opts.VerifyProvenance, "verify-provenance", false, "cryptographically verify each sigstore attestation bundle against the live Sigstore TUF trust root")
+	cmd.Flags().StringVar(&sigMode, "signature-mode", "warn", "npm dist.signatures verification: warn (default), enforce, or off")
 	return cmd
 }

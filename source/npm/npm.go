@@ -37,6 +37,10 @@ type Options struct {
 	VerifyProvenance bool
 	TrustedRoot      *root.TrustedRoot
 
+	// SignatureMode controls verification of npm's dist.signatures (the
+	// ECDSA signature over {name}@{version}:{integrity}). Default warn.
+	SignatureMode SignatureMode
+
 	// test hook: forces a different package integrity to provoke a mismatch.
 	overrideIntegrity func(name string) string
 }
@@ -44,6 +48,7 @@ type Options struct {
 type Source struct {
 	opts Options
 	http *client.Client
+	keys keyCache
 }
 
 func New(opts Options) *Source {
@@ -98,6 +103,10 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 	}
 	if err := verifyTarball(tarball, wantIntegrity); err != nil {
 		return nil, fmt.Errorf("%s@%s: %w", name, version, err)
+	}
+
+	if err := s.verifySignature(ctx, name, version, meta.Dist.Integrity, metaRaw); err != nil {
+		return nil, err
 	}
 
 	reader, err := archives.OpenBytesWithPrefix(name+".tgz", tarball, "package/")

@@ -72,6 +72,12 @@ type SyncOptions struct {
 	// Rekor inclusion proof, DSSE signature, subject digest matches
 	// the fetched tarball). Implies fetching the trust root from TUF.
 	VerifyProvenance bool
+
+	// SignatureMode controls npm dist.signatures (ECDSA over
+	// {name}@{version}:{integrity}) verification. Warn (default) verifies
+	// when a signature is present and fails on a bad one; enforce
+	// additionally fails on missing signatures; off skips verification.
+	SignatureMode npm.SignatureMode
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
@@ -184,7 +190,11 @@ type sources struct {
 }
 
 func buildSources(opts SyncOptions) (sources, error) {
-	npmOpts := npm.Options{RegistryURL: opts.RegistryURL, VerifyProvenance: opts.VerifyProvenance}
+	npmOpts := npm.Options{
+		RegistryURL:      opts.RegistryURL,
+		VerifyProvenance: opts.VerifyProvenance,
+		SignatureMode:    opts.SignatureMode,
+	}
 	if opts.VerifyProvenance {
 		tr, err := loadTrustedRoot()
 		if err != nil {
