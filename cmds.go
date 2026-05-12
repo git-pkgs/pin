@@ -87,7 +87,7 @@ func List(opts VerifyOptions) ([]ListEntry, error) {
 		return nil, err
 	}
 	if l == nil {
-		return nil, fmt.Errorf("no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
+		return nil, fmt.Errorf("%w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
 	}
 	out := make([]ListEntry, 0, len(l.Assets))
 	for _, a := range l.Assets {
@@ -114,7 +114,7 @@ func Path(name string, opts VerifyOptions) ([]string, error) {
 		return nil, err
 	}
 	if l == nil {
-		return nil, fmt.Errorf("no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
+		return nil, fmt.Errorf("%w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
 	}
 	var paths []string
 	for _, a := range l.Assets {

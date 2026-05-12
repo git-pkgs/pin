@@ -62,7 +62,7 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 		return nil, err
 	}
 	if l == nil {
-		return nil, fmt.Errorf("no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
+		return nil, fmt.Errorf("%w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
 	}
 
 	res := &VerifyResult{}

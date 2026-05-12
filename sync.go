@@ -220,7 +220,7 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 // lockfile's recorded integrity. No network, no writes.
 func (c *Client) syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) (*SyncResult, error) {
 	if prev == nil {
-		return nil, fmt.Errorf("--no-fetch: no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
+		return nil, fmt.Errorf("--no-fetch: %w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
 	}
 	if err := checkFrozen(m, prev, prevVersions); err != nil {
 		return nil, fmt.Errorf("--no-fetch: %w", err)
@@ -230,7 +230,7 @@ func (c *Client) syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.
 		return nil, fmt.Errorf("--no-fetch: %w", err)
 	}
 	if vr.Failed() {
-		return nil, fmt.Errorf("--no-fetch: %s", vr.Summary())
+		return nil, fmt.Errorf("--no-fetch: %w: %s", ErrVerifyFailed, vr.Summary())
 	}
 	return &SyncResult{Lock: prev, Changes: lock.Diff(prev, prev)}, nil
 }
@@ -245,7 +245,7 @@ func safeOut(dir, outDir, out string) (string, error) {
 	dst := filepath.Clean(filepath.Join(root, filepath.FromSlash(out)))
 	rel, err := filepath.Rel(root, dst)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("refusing to write outside out dir: out=%q resolves to %q", out, dst)
+		return "", fmt.Errorf("%w: out=%q resolves to %q", ErrPathEscape, out, dst)
 	}
 	return dst, nil
 }
@@ -309,22 +309,22 @@ func pruneEmpty(dir, stop string) {
 // every locked asset must still be claimed by a manifest entry.
 func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) error {
 	if prev == nil {
-		return fmt.Errorf("--frozen: no lockfile present; run sync without --frozen first")
+		return fmt.Errorf("%w: no lockfile present; run sync without --frozen first", ErrFrozenDrift)
 	}
 	manifestNames := map[string]bool{}
 	for _, e := range m.Assets {
 		manifestNames[e.Name] = true
 		locked := prevVersions[e.Name]
 		if locked == "" {
-			return fmt.Errorf("--frozen: %s is in the manifest but not the lockfile", e.Name)
+			return fmt.Errorf("%w: %s is in the manifest but not the lockfile", ErrFrozenDrift, e.Name)
 		}
 		if !npm.IsSticky(locked, e.Version) {
-			return fmt.Errorf("--frozen: %s is locked at %s which no longer satisfies manifest constraint %q", e.Name, locked, e.Version)
+			return fmt.Errorf("%w: %s is locked at %s which no longer satisfies manifest constraint %q", ErrFrozenDrift, e.Name, locked, e.Version)
 		}
 	}
 	for _, a := range prev.Assets {
 		if !manifestNames[a.Name] {
-			return fmt.Errorf("--frozen: %s is in the lockfile but not the manifest", a.Name)
+			return fmt.Errorf("%w: %s is in the lockfile but not the manifest", ErrFrozenDrift, a.Name)
 		}
 	}
 	return nil

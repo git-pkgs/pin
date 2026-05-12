@@ -54,10 +54,10 @@ func enforceTrust(m *manifest.Manifest, l *lock.Lock, opts SyncOptions) error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("require_provenance: no attestation recorded for: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("%w for: %s", ErrProvenanceMissing, strings.Join(missing, ", "))
 	}
 	if len(mismatches) > 0 {
-		return fmt.Errorf("require_publisher_matches_repository: %s", strings.Join(mismatches, "; "))
+		return fmt.Errorf("%w: %s", ErrPublisherMismatch, strings.Join(mismatches, "; "))
 	}
 	return nil
 }

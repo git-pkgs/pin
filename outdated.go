@@ -70,7 +70,7 @@ func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]Outdated
 		return nil, err
 	}
 	if l == nil {
-		return nil, fmt.Errorf("no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
+		return nil, fmt.Errorf("%w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
 	}
 
 	src := c.NPM
