@@ -37,7 +37,7 @@ Each row is one plausible attack. "Mitigation" is what `pin` does today; "Residu
 | Threat | Mitigation | Residual |
 |---|---|---|
 | Network attacker substitutes tarball bytes in flight | TLS + `dist.integrity` verification before extraction | TLS-pinning not enforced; relies on the system trust store |
-| CDN serves different bytes than the npm tarball | `pin` fetches from the npm tarball directly, not the CDN, for the byte-of-record. CDN URL is recorded as metadata only. | None for the v0.1 fetch path |
+| CDN serves different bytes than the npm tarball | `pin` fetches from the npm tarball directly, not the CDN, for the byte-of-record. CDN URL is recorded as metadata only. | None for the current fetch path |
 | Registry rewrites `dist.integrity` for an already-published version | First sync records `dist.integrity` in the lockfile; subsequent syncs verify against the recorded value. A drifted integrity field surfaces as a mismatch. | First sync of a freshly compromised version trusts the registry. Mitigated by cooldown (M2) and `--verify-provenance` (M19) |
 | Local vendored file modified post-sync | `pin verify` re-hashes against the lockfile, exit 4 on drift | None |
 | Lockfile JSON resource exhaustion (DoS) | `lock.Read` caps input at 16 MiB via `io.LimitReader` | None |
@@ -51,11 +51,11 @@ Each row is one plausible attack. "Mitigation" is what `pin` does today; "Residu
 
 | Threat | Mitigation | Residual |
 |---|---|---|
-| Leaked-token attacker publishes a forged version with valid sigstore bundle from their own CI | `--require-publisher-matches-repository` rejects when the attestation's `builder_id` repo differs from the package's `repository.url` | Requires the user to opt in to the flag (default off in v0.2) |
-| Maintainer disables trusted publishing on a previously-attested package | `outdated` reports `provenance-downgrade` severity (above deprecated, below yanked) | Surfaces in `outdated`, not at sync time. Promote to a `sync` error in v0.3? |
+| Leaked-token attacker publishes a forged version with valid sigstore bundle from their own CI | `--require-publisher-matches-repository` rejects when the attestation's `builder_id` repo differs from the package's `repository.url` | Requires the user to opt in to the flag (default off) |
+| Maintainer disables trusted publishing on a previously-attested package | `outdated` reports `provenance-downgrade` severity (above deprecated, below yanked) | Surfaces in `outdated`, not at sync time. Promote to a `sync` error later? |
 | Compromised registry serves a forged sigstore bundle | `--verify-provenance` validates the bundle against Sigstore's TUF trust root (Fulcio cert chain, Rekor inclusion proof, DSSE signature, subject digest matches the fetched tarball) | Requires the user to opt in (default off). Local TUF root cache is a follow-up so verification isn't a per-sync network call. |
 | Compromised registry rotates Ed25519 signing keys to one it controls | `--verify-provenance` covers the sigstore path. `dist.signatures` (the older Ed25519 signal) is not yet verified by `pin` — M2 follow-up. | Pending until npm Ed25519 verification ships |
-| Typosquat: user adds `lodahs` thinking it's `lodash` | None at `pin add` time (the user typed the name). The lockfile's purl is the record. | Out of scope for v0.1. A "did you mean" preflight would need a popularity / similarity service. |
+| Typosquat: user adds `lodahs` thinking it's `lodash` | None at `pin add` time (the user typed the name). The lockfile's purl is the record. | Out of scope. A "did you mean" preflight would need a popularity / similarity service. |
 
 ### Fresh-publish supply chain
 
@@ -91,7 +91,7 @@ Each row is one plausible attack. "Mitigation" is what `pin` does today; "Residu
 ## Out of scope
 
 - **Sandboxing the vendored files.** `pin` ensures the bytes match what was published; it does not ensure the bytes are free of bugs or backdoors the publisher introduced. A vendored htmx with a backdoor in v2.0.6 will still backdoor your users.
-- **Authenticated registries.** v0.1 does not support `~/.npmrc`-shaped auth. Public registries only.
+- **Authenticated registries.** `pin` does not yet support `~/.npmrc`-shaped auth. Public registries only.
 - **Resource exhaustion via huge manifest entry counts.** A manifest with ten thousand entries will issue ten thousand resolves. Unusual enough that we don't defend.
 
 ## Mapping to CWE classes

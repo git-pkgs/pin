@@ -159,8 +159,6 @@ assets:
 
 `pin outdated` flags a `provenance-downgrade` severity (above deprecated, below yanked) when the locked version had an attestation and the latest doesn't. That's the signal that trusted publishing was switched off by the maintainer or by whoever now controls the publish token.
 
-**Upgrading a lockfile across pin versions.** Lockfiles written by pre-v0.2 pin binaries have no `pin:attestation.*` properties even when the underlying version had a SLSA attestation available. Under `--strict-provenance`, every such entry is treated as "no attestation" — `pin sync` once with a newer binary rewrites the lockfile with the attestation properties for any version that carries one upstream. No flag day, no schema bump.
-
 ## Lockfile
 
 `pin.lock` is a valid CycloneDX 1.6 SBOM. Each package becomes a `library` component with the registry tarball hash; each vendored file becomes a nested `file` component with its own SHA-384, the CDN URL, and pin-specific metadata under a `pin:` property namespace. Any CycloneDX consumer (Dependency-Track, GUAC, OSV-scanner, `git-pkgs sbom`) reads it directly. `serialNumber` and `metadata.timestamp` are deliberately omitted so re-runs are byte-stable and parallel branches don't conflict on the file.

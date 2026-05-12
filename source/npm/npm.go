@@ -36,8 +36,8 @@ type Options struct {
 	HTTPClient      *client.Client
 
 	// Verifier, when non-nil, validates each attestation bundle the npm
-	// path records. Nil = record-only (the v0.1 behaviour); a non-nil
-	// verifier promotes attestations to a hard fetch dependency.
+	// path records. Nil = record-only; a non-nil verifier promotes
+	// attestations to a hard fetch dependency.
 	Verifier source.ProvenanceVerifier
 
 	// SignatureMode controls verification of npm's dist.signatures (the

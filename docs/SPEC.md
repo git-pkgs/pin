@@ -54,7 +54,7 @@ re-runs and conflict-free across parallel branches.
     every `pin:out` path is relative to.
 
 A reader MUST tolerate additional `properties[]` entries it does not
-recognise: forward-compatibility for v0.2 fields depends on this.
+recognise: forward-compatibility for future fields depends on this.
 
 ## components
 
@@ -219,25 +219,6 @@ is set.
 See [Could lockfiles just be SBOMs?][cl] for the motivation.
 
 [cl]: https://nesbitt.io/2025/12/23/could-lockfiles-just-be-sboms.html
-
-## Lockfile compatibility across pin versions
-
-Lockfiles written by older pin binaries are forward-compatible:
-
-- A v0.1 lockfile has no `pin:attestation.*` properties even when the
-  underlying npm version had a SLSA attestation available at the time.
-  Under `--strict-provenance`, every v0.1 lockfile entry is treated as
-  "no attestation" — i.e., `--strict-provenance` will fail until the
-  user re-runs `pin sync` against the same manifest with a newer pin
-  binary. The re-sync rewrites the lockfile with the attestation
-  properties for any version that carries one upstream.
-- A pin v0.1 binary reading a lockfile with `pin:attestation.*`
-  properties tolerates them as unknown additive content per the
-  forward-compat rule below.
-
-The migration is "bump pin, run `pin sync` once, commit the rewritten
-lockfile". No flag day, no schema-version bump, no breaking change to
-`pin.lock`.
 
 ## Forward compatibility
 

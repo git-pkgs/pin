@@ -117,9 +117,9 @@ leak where a package's real payload arrives via a `postinstall` hook.
   bytes match what was published; they do not ensure the bytes are
   free of bugs or backdoors that the publisher introduced. A vendored
   htmx with a backdoor in v2.0.6 will still backdoor your users.
-- **Private registries.** v0.1 does not support authenticated
-  registries. Use the `pkg:npm/foo?repository_url=...` purl qualifier
-  pattern when v0.2 lands.
+- **Private registries.** `pin` does not yet support authenticated
+  registries. The `pkg:npm/foo?repository_url=...` purl qualifier is
+  reserved for when this lands.
 - **Resource exhaustion via huge file counts.** A manifest with
   ten thousand entries will issue ten thousand resolves. The shape
   is unusual enough that we don't defend against it.

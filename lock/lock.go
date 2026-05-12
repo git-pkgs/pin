@@ -60,8 +60,8 @@ type Asset struct {
 
 // Attestation records the SLSA Provenance v1 fields for a package version,
 // populated when the publisher used trusted publishing. Cryptographic
-// verification of the underlying sigstore bundle is a separate step;
-// pin v0.2 records the metadata without verifying yet.
+// verification of the underlying sigstore bundle is a separate step,
+// gated on `--verify-provenance` at sync time.
 type Attestation struct {
 	PredicateType    string
 	BuilderID        string
