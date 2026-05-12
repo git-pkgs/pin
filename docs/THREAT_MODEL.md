@@ -1,6 +1,6 @@
 # Threat model
 
-Companion to [`../SECURITY.md`](../SECURITY.md). `SECURITY.md` documents the defences `pin` ships; this file documents the adversaries those defences exist to stop, the assets they want, and how each plausible attack maps onto a defence. Informed by [Package Manager Threat Models](https://nesbitt.io/2026/05/05/package-manager-threat-models.html) and [Package Manager CWEs](https://nesbitt.io/2026/05/04/package-manager-cwes.html).
+Companion to [`SECURITY.md`](SECURITY.md). `SECURITY.md` documents the defences `pin` ships; this file documents the adversaries those defences exist to stop, the assets they want, and how each plausible attack maps onto a defence. Informed by [Package Manager Threat Models](https://nesbitt.io/2026/05/05/package-manager-threat-models.html) and [Package Manager CWEs](https://nesbitt.io/2026/05/04/package-manager-cwes.html).
 
 ## Trust boundaries
 

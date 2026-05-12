@@ -3,7 +3,7 @@
 This document lists the threats `pin` is designed to defend against,
 where each defence lives in the code, and the threats that are
 out of scope. The structured adversary-by-asset threat model lives in
-[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). Lockfile schema is in `docs/SPEC.md`.
+[THREAT_MODEL.md](THREAT_MODEL.md). Lockfile schema is in [SPEC.md](SPEC.md).
 
 ## Threat model in one paragraph
 
@@ -110,25 +110,6 @@ leak where a package's real payload arrives via a `postinstall` hook.
   `gh attestation verify`.
 - The released archives include syft-generated SBOMs.
 
-## Defences planned but not yet shipped
-
-- **npm signature verification** (M2 deferred). npm publishes Ed25519
-  signatures over `{name}@{version}:{integrity}` for many recent
-  versions; `pin` does not yet verify these. The tarball hash is still
-  anchored against `dist.integrity`, so a registry-side attacker can't
-  substitute bytes without invalidating the lockfile, but the registry
-  itself could substitute the metadata. Signature verification closes
-  that hole.
-- **Provenance attestations** (v0.2). npm publishes `dist.attestations`
-  for packages built in CI; `pin` will record the attestation
-  pointers in the lockfile and add a `--strict-provenance` flag that
-  fails when a pinned version has no attestation. See docs/SPEC.md
-  "Reserved fields".
-- **Cooldown** (v0.2). Most malicious npm versions are caught within
-  24–48 hours. A default-on `min_release_age` window blocks the
-  majority of fresh-publish supply-chain attacks at the cost of a
-  bounded lag on bleeding-edge releases.
-
 ## Out of scope
 
 - **Sandboxing.** `pin` writes files to disk that the consuming web
@@ -142,9 +123,3 @@ leak where a package's real payload arrives via a `postinstall` hook.
 - **Resource exhaustion via huge file counts.** A manifest with
   ten thousand entries will issue ten thousand resolves. The shape
   is unusual enough that we don't defend against it.
-
-## Reporting
-
-Please email security issues privately to the maintainer rather than
-opening a public issue. A public GitHub issue with `[SECURITY]` in
-the title is also acceptable for non-critical findings.

@@ -101,17 +101,15 @@ pin init                       write a starter pin.yaml in the current directory
 pin sbom [-f spdx|cyclonedx-xml] [-o FILE]  emit the lockfile as an SBOM
 ```
 
-`pin sync` prints a one-line stderr nudge when it detects a CI environment (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `CIRCLECI`, `JENKINS_URL`) and `--frozen` is not set. The safer flag is one keystroke away.
+`pin sync` prints a one-line stderr nudge when it detects a CI environment (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `CIRCLECI`, `JENKINS_URL`) and `--frozen` is not set.
 
 ## Safe defaults
 
-`pin` inverts npm's defaults where it matters. The safer behaviour is what happens when you run the command without thinking.
+The cooldown window (`min_release_age`) is on by default at 48 hours. Most malicious npm versions are caught within 24 to 48 hours, and the window blocks the majority of fresh-publish supply-chain attacks. Ranges fall back to the next-highest satisfying version outside the window; dist-tags fail with a clear error if `latest` is too fresh; exact pins bypass the window because you named the version explicitly. Opt out with `min_release_age: 0` at the manifest top level or per entry.
 
-- **Cooldown on by default at 48 hours.** Most malicious npm versions are caught within 24 to 48 hours; the default-on `min_release_age` window blocks the majority of fresh-publish supply-chain attacks for free. Ranges fall back to the next-highest satisfying version outside the window; dist-tags fail with a clear error if `latest` is too fresh; exact pins bypass it (you named the version explicitly). Opt out with `min_release_age: 0` at the manifest top level or per entry.
-- **`--frozen` is the single CI safety flag.** It bails before any network if the manifest and lockfile disagree.
-- **`--no-fetch` is the cheap post-checkout assertion.** Same as `--frozen` plus a re-hash of every vendored file against the lockfile's recorded integrity. Designed for CI jobs that vendored at image-build time and want to assert nothing was tampered with after `git checkout`. No network, no writes.
-- **No silent lockfile mutation.** `sync` rewrites the lockfile only when the manifest changed.
-- **No code execution.** No install scripts, no hooks, no plugins. Stages 5 and 6 of [The Stages of Package Installation](https://nesbitt.io/2026/04/27/the-stages-of-package-installation.html) are absent.
+`--frozen` is the single CI safety flag: it bails before any network if the manifest and lockfile disagree. `--no-fetch` adds a re-hash of every vendored file against the lockfile's recorded integrity on top of `--frozen` — designed for CI jobs that vendored at image-build time and want to assert nothing was tampered with after `git checkout`, with no network and no writes.
+
+`pin sync` rewrites the lockfile only when the manifest changed; identical bytes skip the write. The tool runs no code from a fetched package: no install scripts, no hooks, no plugin loaders. Stages 5 and 6 of [The Stages of Package Installation](https://nesbitt.io/2026/04/27/the-stages-of-package-installation.html) are absent by design.
 
 ## Provenance and trusted publishing
 
@@ -167,7 +165,7 @@ assets:
 
 `pin.lock` is a valid CycloneDX 1.6 SBOM. Each package becomes a `library` component with the registry tarball hash; each vendored file becomes a nested `file` component with its own SHA-384, the CDN URL, and pin-specific metadata under a `pin:` property namespace. Any CycloneDX consumer (Dependency-Track, GUAC, OSV-scanner, `git-pkgs sbom`) reads it directly. `serialNumber` and `metadata.timestamp` are deliberately omitted so re-runs are byte-stable and parallel branches don't conflict on the file.
 
-Schema is documented normatively in [docs/SPEC.md](docs/SPEC.md). Defences are in [SECURITY.md](SECURITY.md); the structured adversary-by-asset model is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+Schema is documented normatively in [docs/SPEC.md](docs/SPEC.md). Defences are in [docs/SECURITY.md](docs/SECURITY.md); the structured adversary-by-asset model is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Integrity
 

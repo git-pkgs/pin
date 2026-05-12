@@ -235,9 +235,9 @@ Lockfiles written by older pin binaries are forward-compatible:
   properties tolerates them as unknown additive content per the
   forward-compat rule below.
 
-In practice, the migration story is "bump pin, run `pin sync` once,
-commit the rewritten lockfile". No flag day, no schema-version bump,
-no breaking change to `pin.lock`.
+The migration is "bump pin, run `pin sync` once, commit the rewritten
+lockfile". No flag day, no schema-version bump, no breaking change to
+`pin.lock`.
 
 ## Forward compatibility
 
