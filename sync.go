@@ -546,15 +546,22 @@ func publisherMismatch(a *lock.Asset, trustedWorkflows []string) string {
 	return fmt.Sprintf("%s@%s: attestation built from %s but package.json says %s", a.Name, a.Version, got, want)
 }
 
-// normaliseRepoURL strips a leading https:// (or http://), trailing .git,
-// and any trailing slash, so two URLs that differ only in scheme or
-// suffix compare equal.
+// normaliseRepoURL strips scheme, trailing .git, trailing slash, and
+// github-style subpaths (`/tree/<branch>/<path>`, `/blob/...`) so two
+// URLs pointing at the same repo compare equal even when one references
+// a subdirectory within a monorepo.
 func normaliseRepoURL(u string) string {
 	u = strings.TrimSuffix(u, "/")
 	u = strings.TrimSuffix(u, ".git")
 	u = strings.TrimPrefix(u, "https://")
 	u = strings.TrimPrefix(u, "http://")
-	return strings.ToLower(u)
+	u = strings.ToLower(u)
+	for _, sep := range []string{"/tree/", "/blob/"} {
+		if i := strings.Index(u, sep); i >= 0 {
+			u = u[:i]
+		}
+	}
+	return u
 }
 
 func lockedVersionsByName(l *lock.Lock) map[string]string {

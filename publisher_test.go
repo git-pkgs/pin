@@ -65,6 +65,19 @@ func TestEnforceTrust_RequireProvenanceMissing(t *testing.T) {
 	}
 }
 
+func TestNormaliseRepoURL_Subpath(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/owner/repo/tree/main/packages/baz": "github.com/owner/repo",
+		"https://github.com/owner/repo/blob/main/README.md":    "github.com/owner/repo",
+		"https://github.com/owner/repo":                        "github.com/owner/repo",
+	}
+	for in, want := range cases {
+		if got := normaliseRepoURL(in); got != want {
+			t.Errorf("normaliseRepoURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestEnforceTrust_PerEntryOptOut(t *testing.T) {
 	m := &manifest.Manifest{
 		Trust: &manifest.Trust{RequireProvenance: boolPtr(true)},
