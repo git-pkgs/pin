@@ -23,6 +23,7 @@ import (
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
 	"github.com/sigstore/sigstore-go/pkg/root"
+	"github.com/sigstore/sigstore-go/pkg/tuf"
 )
 
 const (
@@ -192,9 +193,9 @@ type sources struct {
 func buildSources(opts SyncOptions) (sources, error) {
 	npmOpts := npm.Options{RegistryURL: opts.RegistryURL, VerifyProvenance: opts.VerifyProvenance}
 	if opts.VerifyProvenance {
-		tr, err := root.FetchTrustedRoot()
+		tr, err := loadTrustedRoot()
 		if err != nil {
-			return sources{}, fmt.Errorf("--verify-provenance: fetch Sigstore trust root: %w", err)
+			return sources{}, fmt.Errorf("--verify-provenance: load Sigstore trust root: %w", err)
 		}
 		npmOpts.TrustedRoot = tr
 	}
@@ -203,6 +204,33 @@ func buildSources(opts SyncOptions) (sources, error) {
 		forge:  forge.New(opts.Forge),
 		rawurl: rawurl.New(rawurl.Options{}),
 	}, nil
+}
+
+// loadTrustedRoot returns the Sigstore TUF trust root, using a pin-local
+// cache at $XDG_CACHE_HOME/pin/sigstore-tuf/ (os.UserCacheDir() on
+// platforms without XDG). ForceCache means a second --verify-provenance
+// sync within the metadata's validity window reuses the cached root
+// without a network round-trip.
+func loadTrustedRoot() (*root.TrustedRoot, error) {
+	cachePath, err := pinTUFCachePath()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(cachePath, dirPerm); err != nil {
+		return nil, fmt.Errorf("create TUF cache dir %s: %w", cachePath, err)
+	}
+	tufOpts := tuf.DefaultOptions()
+	tufOpts.CachePath = cachePath
+	tufOpts.ForceCache = true
+	return root.FetchTrustedRootWithOptions(tufOpts)
+}
+
+func pinTUFCachePath() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "pin", "sigstore-tuf"), nil
 }
 
 func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
