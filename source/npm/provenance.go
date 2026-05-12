@@ -2,14 +2,12 @@ package npm
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"strings"
 
 	"github.com/git-pkgs/pin/source"
+	"github.com/git-pkgs/pin/source/attestation"
 )
 
 // Attestation re-exports source.Attestation for internal use.
@@ -45,19 +43,25 @@ func (s *Source) fetchAttestationWithBundle(ctx context.Context, raw json.RawMes
 		if !strings.HasPrefix(a.PredicateType, "https://slsa.dev/provenance/") {
 			continue
 		}
-		var b sigstoreBundle
-		if err := json.Unmarshal(a.Bundle, &b); err != nil {
-			return nil, nil, fmt.Errorf("decode bundle: %w", err)
-		}
-		att, err := extractFromBundle(&b)
+		parsed, err := attestation.Parse(a.Bundle)
 		if err != nil {
 			return nil, nil, fmt.Errorf("parse attestation bundle %s: %w", ref.URL, err)
 		}
-		att.BundleURL = ref.URL
-		if att.PredicateType == "" {
-			att.PredicateType = a.PredicateType
+		if parsed == nil {
+			continue
 		}
-		return att, []byte(a.Bundle), nil
+		predicateType := parsed.PredicateType
+		if predicateType == "" {
+			predicateType = a.PredicateType
+		}
+		return &Attestation{
+			PredicateType:    predicateType,
+			BuilderID:        parsed.BuilderID,
+			SourceRepository: parsed.SourceRepository,
+			SourceRevision:   parsed.SourceRevision,
+			SignerIdentity:   parsed.SignerIdentity,
+			BundleURL:        ref.URL,
+		}, []byte(a.Bundle), nil
 	}
 	return nil, nil, nil
 }
@@ -78,139 +82,4 @@ func findAttestationRef(raw json.RawMessage) *distAttestationsRef {
 		return v.Dist.Attestations
 	}
 	return nil
-}
-
-type sigstoreBundle struct {
-	DSSEEnvelope         dsseEnvelope         `json:"dsseEnvelope"`
-	VerificationMaterial verificationMaterial `json:"verificationMaterial"`
-}
-
-type dsseEnvelope struct {
-	Payload     string `json:"payload"`
-	PayloadType string `json:"payloadType"`
-}
-
-type verificationMaterial struct {
-	Certificate          *cert  `json:"certificate"`
-	X509CertificateChain *chain `json:"x509CertificateChain"`
-}
-
-type cert struct {
-	RawBytes string `json:"rawBytes"`
-}
-
-type chain struct {
-	Certificates []cert `json:"certificates"`
-}
-
-type inTotoStatement struct {
-	Type          string          `json:"_type"`
-	PredicateType string          `json:"predicateType"`
-	Subject       []inTotoSubject `json:"subject"`
-	Predicate     slsaPredicate   `json:"predicate"`
-}
-
-type inTotoSubject struct {
-	Name   string            `json:"name"`
-	Digest map[string]string `json:"digest"`
-}
-
-type slsaPredicate struct {
-	BuildDefinition slsaBuildDefinition `json:"buildDefinition"`
-	RunDetails      slsaRunDetails      `json:"runDetails"`
-}
-
-type slsaBuildDefinition struct {
-	ExternalParameters   json.RawMessage `json:"externalParameters"`
-	ResolvedDependencies []slsaResource  `json:"resolvedDependencies"`
-}
-
-type slsaResource struct {
-	URI    string            `json:"uri"`
-	Digest map[string]string `json:"digest"`
-}
-
-type slsaRunDetails struct {
-	Builder slsaBuilder `json:"builder"`
-}
-
-type slsaBuilder struct {
-	ID string `json:"id"`
-}
-
-func extractFromBundle(b *sigstoreBundle) (*Attestation, error) {
-	if b.DSSEEnvelope.Payload == "" {
-		return nil, fmt.Errorf("bundle has no DSSE payload")
-	}
-
-	payload, err := base64.StdEncoding.DecodeString(b.DSSEEnvelope.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("decode DSSE payload: %w", err)
-	}
-
-	var stmt inTotoStatement
-	if err := json.Unmarshal(payload, &stmt); err != nil {
-		return nil, fmt.Errorf("decode in-toto statement: %w", err)
-	}
-
-	att := &Attestation{
-		PredicateType: stmt.PredicateType,
-		BuilderID:     stmt.Predicate.RunDetails.Builder.ID,
-	}
-
-	// resolvedDependencies[0] is conventionally the source repo by URI/digest
-	for _, dep := range stmt.Predicate.BuildDefinition.ResolvedDependencies {
-		if strings.HasPrefix(dep.URI, "git+") {
-			att.SourceRepository = strings.TrimSuffix(strings.TrimPrefix(dep.URI, "git+"), ".git")
-			for alg, hex := range dep.Digest {
-				if alg == "sha1" || alg == "gitCommit" {
-					att.SourceRevision = hex
-					break
-				}
-			}
-			break
-		}
-	}
-
-	att.SignerIdentity = extractSignerIdentity(b.VerificationMaterial)
-
-	// resolvedDependencies often record the source repo as a git+https URI
-	// with refs/heads/... in the path; clean that for SourceRepository,
-	// and pull SourceRevision from the digest if present.
-	if att.SourceRepository != "" {
-		if i := strings.Index(att.SourceRepository, "@refs/"); i >= 0 {
-			att.SourceRepository = att.SourceRepository[:i]
-		}
-	}
-	return att, nil
-}
-
-func extractSignerIdentity(m verificationMaterial) string {
-	var raw string
-	switch {
-	case m.Certificate != nil && m.Certificate.RawBytes != "":
-		raw = m.Certificate.RawBytes
-	case m.X509CertificateChain != nil && len(m.X509CertificateChain.Certificates) > 0:
-		raw = m.X509CertificateChain.Certificates[0].RawBytes
-	default:
-		return ""
-	}
-	der, err := base64.StdEncoding.DecodeString(raw)
-	if err != nil {
-		return ""
-	}
-	if block, _ := pem.Decode(der); block != nil {
-		der = block.Bytes
-	}
-	c, err := x509.ParseCertificate(der)
-	if err != nil {
-		return ""
-	}
-	if len(c.URIs) > 0 {
-		return c.URIs[0].String()
-	}
-	if len(c.EmailAddresses) > 0 {
-		return c.EmailAddresses[0]
-	}
-	return ""
 }

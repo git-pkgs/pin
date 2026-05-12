@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/git-pkgs/purl"
+
+	"github.com/git-pkgs/pin/source/attestation"
 )
 
 const fullSHALen = 40
@@ -79,14 +81,20 @@ func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string,
 		return nil, nil
 	}
 	for _, a := range list.Attestations {
-		att, err := parseGitHubBundle(a.Bundle)
-		if err != nil || att == nil {
+		parsed, err := attestation.Parse(a.Bundle)
+		if err != nil || parsed == nil {
 			continue
 		}
-		if !strings.HasPrefix(att.PredicateType, "https://slsa.dev/provenance/") {
+		if !strings.HasPrefix(parsed.PredicateType, "https://slsa.dev/provenance/") {
 			continue
 		}
-		return att, a.Bundle
+		return &Attestation{
+			PredicateType:    parsed.PredicateType,
+			BuilderID:        parsed.BuilderID,
+			SourceRepository: parsed.SourceRepository,
+			SourceRevision:   parsed.SourceRevision,
+			SignerIdentity:   parsed.SignerIdentity,
+		}, a.Bundle
 	}
 	return nil, nil
 }
