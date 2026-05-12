@@ -46,6 +46,7 @@ func New(opts Options) *Source {
 
 type Resolved = source.Resolved
 type ResolvedFile = source.ResolvedFile
+type Attestation = source.Attestation
 
 // Resolve fetches the named files for a forge-hosted package. The purl's
 // Type selects the forge (only "github" in this build); Namespace is the

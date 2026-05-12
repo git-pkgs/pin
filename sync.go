@@ -355,6 +355,8 @@ func resolveForgeEntry(ctx context.Context, src *forge.Source, m *manifest.Manif
 	assets := make([]lock.Asset, 0, len(resolved.Files))
 	files := make([]fileContent, 0, len(resolved.Files))
 
+	att := toLockAttestation(resolved.Attestation)
+
 	for _, f := range resolved.Files {
 		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
 		assetType := lock.ClassifyType(f.Path)
@@ -375,6 +377,7 @@ func resolveForgeEntry(ctx context.Context, src *forge.Source, m *manifest.Manif
 			Size:             f.Size,
 			PackageIntegrity: resolved.PackageIntegrity,
 			SourceRepository: resolved.SourceRepository,
+			Attestation:      att,
 		})
 		files = append(files, fileContent{out: out, content: f.Content})
 	}
