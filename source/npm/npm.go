@@ -260,18 +260,25 @@ func parseRepository(raw json.RawMessage) string {
 	}
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		return normalizeRepoURL(s)
+		return canonicalRepoURL(s)
 	}
 	var obj struct {
 		URL string `json:"url"`
 	}
 	if json.Unmarshal(raw, &obj) == nil {
-		return normalizeRepoURL(obj.URL)
+		return canonicalRepoURL(obj.URL)
 	}
 	return ""
 }
 
-func normalizeRepoURL(u string) string {
+// canonicalRepoURL turns the various shapes registries return in
+// package.json's `repository.url` field (`git+https://`, `git://`,
+// `ssh://git@`, scp-style `git@host:owner/repo`) into a canonical
+// `https://host/owner/repo` form. It is a one-way conversion for
+// storage in the lockfile, NOT a comparator — the equivalent for the
+// publisher-matches-repository check lives in trust.go as
+// normaliseRepoURL.
+func canonicalRepoURL(u string) string {
 	u = strings.TrimPrefix(u, "git+")
 	u = strings.TrimSuffix(u, ".git")
 	if rest, ok := strings.CutPrefix(u, "git://"); ok {
