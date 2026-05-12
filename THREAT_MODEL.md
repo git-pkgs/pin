@@ -44,6 +44,8 @@ Each row is one plausible attack. "Mitigation" is what `pin` does today; "Residu
 | Tarball decompression bomb | 100 MiB compressed cap in `npm.fetchTarball`; `archives` enforces per-entry and total uncompressed caps | None |
 | Symlink / hardlink escape from tarball | `archives` rejects both | Not asserted by a pin-side fixture (M23 follow-up) |
 | Path traversal via manifest `files:` | `manifest.validateFilePath` rejects absolute paths and `..`; `Entry.Slug` sanitises forge owner/repo and `@scope/pkg` to `__` | Defence in depth: `safeOut` recomputes the joined path with `filepath.Rel` against the out root before any byte hits the disk |
+| SSRF: registry redirects to internal services, or a `url:` manifest names `http://localhost`, RFC1918, CGNAT, or link-local | `internal/safehttp` validates every resolved IP before dial and rejects all of those ranges. DNS is resolved once and the connection dials the IP directly, so a rebind between resolve and connect cannot escape the gate. | None |
+| Exfiltration via redirect to `file://` / `gopher://` / `data://` | `internal/safehttp` `CheckRedirect` rejects non-`http(s)` schemes; redirect chain capped at 10 with each hop revalidated against the dial gate | None |
 
 ### Trust and provenance
 
@@ -90,7 +92,6 @@ Each row is one plausible attack. "Mitigation" is what `pin` does today; "Residu
 
 - **Sandboxing the vendored files.** `pin` ensures the bytes match what was published; it does not ensure the bytes are free of bugs or backdoors the publisher introduced. A vendored htmx with a backdoor in v2.0.6 will still backdoor your users.
 - **Authenticated registries.** v0.1 does not support `~/.npmrc`-shaped auth. Public registries only.
-- **DNS rebinding between metadata and tarball fetch.** Connection reuse mitigates in practice; an explicit defence (pinning to a resolved IP across a single resolve) is not implemented.
 - **Resource exhaustion via huge manifest entry counts.** A manifest with ten thousand entries will issue ten thousand resolves. Unusual enough that we don't defend.
 
 ## Mapping to CWE classes

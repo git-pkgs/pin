@@ -15,6 +15,7 @@ import (
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
 
+	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
 )
 
@@ -30,6 +31,7 @@ func New(opts Options) *Source {
 	c := opts.HTTPClient
 	if c == nil {
 		c = client.NewClient()
+		c.HTTPClient = safehttp.New(c.HTTPClient, safehttp.Options{})
 	}
 	return &Source{http: c}
 }

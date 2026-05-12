@@ -78,8 +78,18 @@ first fetch (TOFU) and verified thereafter.
   exponential backoff and jitter, and (via `registries/fetch`)
   caches DNS for 5 minutes and implements a per-host circuit breaker.
 - TLS verification is on by default; there is no flag to disable it.
-- HTTP redirects are followed by the standard library client, capped
-  at 10 redirects by default.
+- The HTTP client passes through `internal/safehttp`, which rejects
+  connections to loopback (127.0.0.0/8, ::1), RFC1918 private
+  ranges, ULA (fc00::/7), CGNAT (100.64.0.0/10), link-local, and
+  multicast addresses. DNS is resolved at dial time and the
+  connection is made directly to the resolved IP, so a rebind
+  between resolution and connect can't escape the gate. The defence
+  applies to both the initial URL and every redirect target.
+- HTTP redirects are capped at 10 and re-validated on each hop
+  (`internal/safehttp` `CheckRedirect`). Non-`http(s)` schemes
+  (`file://`, `gopher://`, `data://`) are rejected on redirect so a
+  registry that returns a `Location: file:///etc/passwd` cannot
+  exfiltrate local files.
 
 ### Code execution
 
@@ -129,10 +139,6 @@ leak where a package's real payload arrives via a `postinstall` hook.
 - **Private registries.** v0.1 does not support authenticated
   registries. Use the `pkg:npm/foo?repository_url=...` purl qualifier
   pattern when v0.2 lands.
-- **DNS rebinding** between metadata fetch and tarball fetch. The HTTP
-  client reuses connections within a session, which mitigates this in
-  practice, but the explicit defence (pinning to a resolved IP
-  across a single resolve) is out of scope.
 - **Resource exhaustion via huge file counts.** A manifest with
   ten thousand entries will issue ten thousand resolves. The shape
   is unusual enough that we don't defend against it.
