@@ -1,4 +1,4 @@
-.PHONY: build test lint cover bench clean
+.PHONY: build test lint cover bench fuzz clean
 
 build:
 	go build -o bin/pin ./cmd/pin
@@ -15,6 +15,16 @@ cover:
 
 bench:
 	go test -bench=. -benchmem -run='^$$' ./...
+
+# fuzz runs each parser's fuzz target sequentially for FUZZTIME (default
+# 30s). The seed corpus runs as a regular `go test` step every CI build;
+# this target is for the longer drift-hunting pass. Override duration
+# with `make fuzz FUZZTIME=2m`.
+FUZZTIME ?= 30s
+fuzz:
+	go test -fuzz=FuzzParse -fuzztime=$(FUZZTIME) ./source/attestation/
+	go test -fuzz=FuzzRead -fuzztime=$(FUZZTIME) ./manifest/
+	go test -fuzz=FuzzRead -fuzztime=$(FUZZTIME) ./lock/
 
 clean:
 	rm -rf bin/ dist/ coverage.out coverage.html

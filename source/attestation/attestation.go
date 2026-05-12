@@ -22,6 +22,13 @@ import (
 	"strings"
 )
 
+// SLSA Provenance v1 uses these two digest names for the source-commit
+// revision, depending on the producer.
+const (
+	digestAlgSHA1      = "sha1"
+	digestAlgGitCommit = "gitCommit"
+)
+
 // Attestation is the identity-side projection of a SLSA Provenance v1
 // statement carried inside a sigstore bundle. Field names follow the
 // SLSA v1 vocabulary; the parser populates whichever fields the
@@ -91,7 +98,7 @@ func Parse(body []byte) (*Attestation, error) {
 		}
 		att.SourceRepository = strings.TrimSuffix(rest, ".git")
 		for alg, hex := range dep.Digest {
-			if alg == "sha1" || alg == "gitCommit" {
+			if alg == digestAlgSHA1 || alg == digestAlgGitCommit {
 				att.SourceRevision = hex
 				break
 			}
