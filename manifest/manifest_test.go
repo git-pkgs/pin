@@ -79,11 +79,6 @@ func TestReadErrors(t *testing.T) {
 			`out is required`,
 		},
 		{
-			"no assets",
-			`out: "x"`,
-			`at least one asset`,
-		},
-		{
 			"empty name",
 			`out: "x"
 assets:

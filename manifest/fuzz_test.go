@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"bytes"
+	"io"
 	"testing"
 )
 
@@ -63,3 +64,49 @@ assets:
 		_, _ = Read(bytes.NewReader(body))
 	})
 }
+
+// FuzzAddEntry / FuzzRemoveEntry exercise the YAML-node-tree edit
+// functions. They take an existing pin.yaml plus an entry name and
+// MUST NOT panic on any byte sequence. Output, when produced, MUST be
+// re-parseable by Read — invariant that AddEntry/RemoveEntry never
+// emit invalid YAML.
+func FuzzAddEntry(f *testing.F) {
+	f.Add([]byte("out: v\nassets: []\n"), "newpkg")
+	f.Add([]byte(""), "newpkg")
+	f.Add([]byte("out: v\n"), "newpkg")                 // assets key missing
+	f.Add([]byte("out: v\nassets: 3\n"), "newpkg")      // assets wrong type
+	f.Add([]byte("out: v\nassets: []\n"), "")           // empty name
+	f.Add([]byte("out: v\nassets: [{name: x}]\n"), "x") // duplicate
+
+	f.Fuzz(func(t *testing.T, body []byte, name string) {
+		var buf bytes.Buffer
+		err := AddEntry(bytes.NewReader(body), &buf, Entry{Name: name, Version: "1.0.0", Files: []string{"a.js"}})
+		if err != nil {
+			return
+		}
+		// Accepted: the output must parse cleanly.
+		if _, err := Read(bytes.NewReader(buf.Bytes())); err != nil {
+			t.Errorf("AddEntry produced output that Read rejects: %v\noutput:\n%s", err, buf.String())
+		}
+	})
+}
+
+func FuzzRemoveEntry(f *testing.F) {
+	f.Add([]byte("out: v\nassets:\n  - name: x\n    version: \"1\"\n    files: [a.js]\n"), "x")
+	f.Add([]byte("out: v\nassets: []\n"), "x") // not present
+	f.Add([]byte(""), "x")
+
+	f.Fuzz(func(t *testing.T, body []byte, name string) {
+		var buf bytes.Buffer
+		err := RemoveEntry(bytes.NewReader(body), &buf, name)
+		if err != nil {
+			return
+		}
+		if _, err := Read(bytes.NewReader(buf.Bytes())); err != nil {
+			t.Errorf("RemoveEntry produced output that Read rejects: %v\noutput:\n%s", err, buf.String())
+		}
+	})
+}
+
+// Compile-time check: ensure io.Reader is satisfied by bytes.NewReader.
+var _ io.Reader = (*bytes.Reader)(nil)

@@ -24,6 +24,8 @@ FUZZTIME ?= 30s
 fuzz:
 	go test -fuzz=FuzzParse -fuzztime=$(FUZZTIME) ./source/attestation/
 	go test -fuzz=FuzzRead -fuzztime=$(FUZZTIME) ./manifest/
+	go test -fuzz=FuzzAddEntry -fuzztime=$(FUZZTIME) ./manifest/
+	go test -fuzz=FuzzRemoveEntry -fuzztime=$(FUZZTIME) ./manifest/
 	go test -fuzz=FuzzRead -fuzztime=$(FUZZTIME) ./lock/
 	go test -fuzz=FuzzFormat -fuzztime=$(FUZZTIME) ./sniff/
 	go test -fuzz=FuzzParseSRI -fuzztime=$(FUZZTIME) ./integrity/

@@ -154,9 +154,6 @@ func (m *Manifest) validate(raw []byte) error {
 	if m.Out == "" {
 		return fmt.Errorf("out is required")
 	}
-	if len(m.Assets) == 0 {
-		return fmt.Errorf("at least one asset is required")
-	}
 	switch m.Layout {
 	case "":
 		m.Layout = LayoutNested

@@ -14,7 +14,18 @@ const yamlIndent = 2
 // AddEntry inserts a new asset entry into a pin.yaml document at its
 // alphabetic position by name and writes the result. Comments and the
 // rest of the document are preserved via the yaml.v3 Node API.
+//
+// The entry is validated against the same minimum the manifest schema
+// requires on Read: Name and Version must be non-empty. This is the
+// boundary check — a library caller shouldn't be able to write a
+// pin.yaml that pin's own reader would then reject.
 func AddEntry(in io.Reader, out io.Writer, e Entry) error {
+	if e.Name == "" {
+		return fmt.Errorf("entry name is required")
+	}
+	if e.Version == "" {
+		return fmt.Errorf("entry version is required")
+	}
 	doc, root, err := readDoc(in)
 	if err != nil {
 		return err
@@ -51,7 +62,7 @@ func AddEntry(in io.Reader, out io.Writer, e Entry) error {
 		return ni.Value < nj.Value
 	})
 
-	return writeDoc(out, doc)
+	return writeValidated(out, doc)
 }
 
 // RemoveEntry removes the named asset from a pin.yaml document and writes
@@ -76,7 +87,25 @@ func RemoveEntry(in io.Reader, out io.Writer, name string) error {
 		return fmt.Errorf("%s is not in the manifest", name)
 	}
 	assets.Content = append(assets.Content[:idx], assets.Content[idx+1:]...)
-	return writeDoc(out, doc)
+	return writeValidated(out, doc)
+}
+
+// writeValidated encodes doc to a buffer, parses the buffer back via
+// Read to confirm the result is a valid manifest, and only then
+// copies the buffer to out. Catches the class of bugs where the input
+// was a YAML mapping but missing required fields (e.g. no `out:`):
+// AddEntry's structural mutations don't synthesize those fields, so
+// the output would silently re-emit something Read would reject.
+func writeValidated(out io.Writer, doc *yaml.Node) error {
+	var buf bytes.Buffer
+	if err := writeDoc(&buf, doc); err != nil {
+		return err
+	}
+	if _, err := Read(bytes.NewReader(buf.Bytes())); err != nil {
+		return fmt.Errorf("edit would produce invalid manifest: %w", err)
+	}
+	_, err := io.Copy(out, &buf)
+	return err
 }
 
 func readDoc(in io.Reader) (*yaml.Node, *yaml.Node, error) {
@@ -91,7 +120,11 @@ func readDoc(in io.Reader) (*yaml.Node, *yaml.Node, error) {
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
 		return nil, nil, fmt.Errorf("manifest is empty or not a YAML document")
 	}
-	return &doc, doc.Content[0], nil
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil, nil, fmt.Errorf("manifest root must be a YAML mapping, got kind=%d", root.Kind)
+	}
+	return &doc, root, nil
 }
 
 func writeDoc(out io.Writer, doc *yaml.Node) error {
