@@ -458,6 +458,124 @@ assets:
 	}
 }
 
+// TestParallelAdds_MergeFriendly simulates two branches each running
+// `pin add` on a different package. If branch A adds foo and branch B
+// adds bar, the resulting lockfiles must converge to byte-identical
+// output regardless of which branch's add ran first. That's what makes
+// pin.lock survive `git merge` without conflict: assets sort by name,
+// so two non-overlapping additions land at disjoint positions in the
+// file.
+func TestParallelAdds_MergeFriendly(t *testing.T) {
+	mux := http.NewServeMux()
+	tarballs := map[string][]byte{}
+	sharedURL := ""
+	for _, name := range []string{"foo", "bar", "common"} {
+		pj, _ := json.Marshal(map[string]any{"name": name, "version": "1.0.0", "main": "index.js"})
+		tb := makeTarball(map[string]string{
+			"package.json": string(pj),
+			"index.js":     "module.exports='" + name + "'",
+		})
+		tarballs["/"+name+"/-/"+name+"-1.0.0.tgz"] = tb
+		h := sha512.Sum512(tb)
+		integrity := "sha512-" + base64.StdEncoding.EncodeToString(h[:])
+		n := name
+		mux.HandleFunc("/"+n+"/1.0.0", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name":    n,
+				"version": "1.0.0",
+				"dist":    map[string]any{"tarball": sharedURL + "/" + n + "/-/" + n + "-1.0.0.tgz", "integrity": integrity},
+			})
+		})
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if tb, ok := tarballs[r.URL.Path]; ok {
+			_, _ = w.Write(tb)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	srv := httptest.NewServer(mux)
+	sharedURL = srv.URL
+	t.Cleanup(srv.Close)
+
+	// Set up a base manifest+lockfile with one common asset, then on
+	// two divergent branches add foo and bar respectively.
+	makeBase := func(t *testing.T) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeManifest(t, dir, `out: "v"
+assets:
+  - name: "common"
+    version: "1.0.0"
+    files: ["index.js"]
+`)
+		if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+
+	// Branch A: add foo to the base.
+	dirA := makeBase(t)
+	if _, err := Add(context.Background(), "foo@1.0.0", []string{"index.js"},
+		AddOptions{Dir: dirA, RegistryURL: srv.URL}); err != nil {
+		t.Fatalf("branch A add: %v", err)
+	}
+
+	// Branch B: add bar to the base.
+	dirB := makeBase(t)
+	if _, err := Add(context.Background(), "bar@1.0.0", []string{"index.js"},
+		AddOptions{Dir: dirB, RegistryURL: srv.URL}); err != nil {
+		t.Fatalf("branch B add: %v", err)
+	}
+
+	// Merge: a third tree with both foo and bar added (either order).
+	mergeOrder1 := makeBase(t)
+	for _, name := range []string{"foo", "bar"} {
+		if _, err := Add(context.Background(), name+"@1.0.0", []string{"index.js"},
+			AddOptions{Dir: mergeOrder1, RegistryURL: srv.URL}); err != nil {
+			t.Fatalf("merge order 1 add %s: %v", name, err)
+		}
+	}
+	mergeOrder2 := makeBase(t)
+	for _, name := range []string{"bar", "foo"} {
+		if _, err := Add(context.Background(), name+"@1.0.0", []string{"index.js"},
+			AddOptions{Dir: mergeOrder2, RegistryURL: srv.URL}); err != nil {
+			t.Fatalf("merge order 2 add %s: %v", name, err)
+		}
+	}
+
+	// Order independence: adds in either order produce identical bytes.
+	lock1, _ := os.ReadFile(filepath.Join(mergeOrder1, DefaultLock))
+	lock2, _ := os.ReadFile(filepath.Join(mergeOrder2, DefaultLock))
+	if !bytes.Equal(lock1, lock2) {
+		t.Error("lockfile bytes differ between add-order foo→bar and bar→foo")
+	}
+	mf1, _ := os.ReadFile(filepath.Join(mergeOrder1, DefaultManifest))
+	mf2, _ := os.ReadFile(filepath.Join(mergeOrder2, DefaultManifest))
+	if !bytes.Equal(mf1, mf2) {
+		t.Error("manifest bytes differ between add-order foo→bar and bar→foo")
+	}
+
+	// Disjoint-diff property: branch A's lockfile and branch B's
+	// lockfile each differ from the base only by additions. Lines
+	// belonging to the common asset must appear unchanged in both.
+	base, _ := os.ReadFile(filepath.Join(mergeOrder1, DefaultLock))
+	lockA, _ := os.ReadFile(filepath.Join(dirA, DefaultLock))
+	lockB, _ := os.ReadFile(filepath.Join(dirB, DefaultLock))
+	for ln := range strings.SplitSeq(string(base), "\n") {
+		if !strings.Contains(ln, "common") {
+			continue
+		}
+		if !strings.Contains(string(lockA), ln) {
+			t.Errorf("base line %q changed on branch A — common-asset lines should be stable", strings.TrimSpace(ln))
+		}
+		if !strings.Contains(string(lockB), ln) {
+			t.Errorf("base line %q changed on branch B — common-asset lines should be stable", strings.TrimSpace(ln))
+		}
+	}
+}
+
 func TestSyncDryRun(t *testing.T) {
 	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
 	dir := t.TempDir()

@@ -2,10 +2,15 @@ package lock
 
 import (
 	"bytes"
+	"flag"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+var updateGolden = flag.Bool("update", false, "rewrite testdata/golden_*.json files from current Write output")
 
 const (
 	sri384a = "sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC"
@@ -59,6 +64,82 @@ func sample() *Lock {
 				License:          "MIT",
 			},
 		},
+	}
+}
+
+// sampleMixed returns a Lock covering one entry per source kind (npm,
+// github forge, url TOFU). Used by TestGoldenLockfile as the
+// regression fixture so any change to Write's output is a visible diff
+// against testdata/golden_mixed.json.
+func sampleMixed() *Lock {
+	return &Lock{
+		OutDir: "internal/web/static/vendor",
+		Assets: []Asset{
+			{
+				Name:             "htmx.org",
+				Version:          "2.0.6",
+				PURL:             "pkg:npm/htmx.org@2.0.6",
+				Type:             "script",
+				Format:           "iife",
+				Path:             "dist/htmx.min.js",
+				Out:              "htmx.org/htmx.min.js",
+				URL:              "https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js",
+				Integrity:        sri384a,
+				Size:             51007,
+				PackageIntegrity: sri512,
+				License:          "0BSD",
+				Repository:       "https://github.com/bigskysoftware/htmx",
+			},
+			{
+				Name:             "highlight.js",
+				Version:          "11.11.1",
+				PURL:             "pkg:github/highlightjs/cdn-release@11.11.1?vcs_revision=abc123def4567890abc123def4567890abc12345",
+				Type:             "script",
+				Path:             "build/highlight.min.js",
+				Out:              "highlightjs__cdn-release/highlight.min.js",
+				URL:              "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@abc123def4567890abc123def4567890abc12345/build/highlight.min.js",
+				Integrity:        sri384a,
+				Size:             8000,
+				PackageIntegrity: "abc123def4567890abc123def4567890abc12345",
+				Repository:       "https://github.com/highlightjs/cdn-release",
+			},
+			{
+				Name:      "my-asset",
+				Version:   "1.0.0",
+				PURL:      "pkg:generic/my-asset@1.0.0?download_url=https%3A%2F%2Fexample.com%2Fdist%2Fasset.js",
+				Type:      "script",
+				Path:      "asset.js",
+				Out:       "my-asset/asset.js",
+				URL:       "https://example.com/dist/asset.js",
+				Integrity: sri384b,
+				Size:      1024,
+				// url sources use the per-file SHA-384 as their package anchor;
+				// PackageIntegrity equals Integrity by construction.
+				PackageIntegrity: sri384b,
+			},
+		},
+	}
+}
+
+func TestGoldenLockfile(t *testing.T) {
+	got := write(t, sampleMixed())
+	path := filepath.Join("testdata", "golden_mixed.json")
+	if *updateGolden {
+		if err := os.MkdirAll("testdata", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Skip("golden updated; re-run without -update to verify")
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden: %v (run `go test ./lock -update` to create)", err)
+	}
+	if got != string(want) {
+		t.Errorf("Write output diverges from %s — re-run with -update if the change is intentional\n--- got ---\n%s\n--- want ---\n%s",
+			path, got, want)
 	}
 }
 

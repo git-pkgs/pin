@@ -1,0 +1,189 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:generic/my-asset@1.0.0?download_url=https%3A%2F%2Fexample.com%2Fdist%2Fasset.js",
+      "components": [
+        {
+          "bom-ref": "pkg:generic/my-asset@1.0.0?download_url=https%3A%2F%2Fexample.com%2Fdist%2Fasset.js#asset.js",
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://example.com/dist/asset.js"
+            }
+          ],
+          "hashes": [
+            {
+              "alg": "SHA-384",
+              "content": "7c5cd3fc9fcce63791f17f14f19f59f17f14f19f59f17f14f19f59f17f14f19f59f17f14f19f59f17f14f19f59f17f14"
+            }
+          ],
+          "name": "asset.js",
+          "properties": [
+            {
+              "name": "pin:out",
+              "value": "my-asset/asset.js"
+            },
+            {
+              "name": "pin:type",
+              "value": "script"
+            },
+            {
+              "name": "pin:size",
+              "value": "1024"
+            }
+          ],
+          "type": "file"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-384",
+          "content": "7c5cd3fc9fcce63791f17f14f19f59f17f14f19f59f17f14f19f59f17f14f19f59f17f14f19f59f17f14f19f59f17f14"
+        }
+      ],
+      "name": "my-asset",
+      "purl": "pkg:generic/my-asset@1.0.0?download_url=https%3A%2F%2Fexample.com%2Fdist%2Fasset.js",
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:github/highlightjs/cdn-release@11.11.1?vcs_revision=abc123def4567890abc123def4567890abc12345",
+      "components": [
+        {
+          "bom-ref": "pkg:github/highlightjs/cdn-release@11.11.1?vcs_revision=abc123def4567890abc123def4567890abc12345#build/highlight.min.js",
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@abc123def4567890abc123def4567890abc12345/build/highlight.min.js"
+            }
+          ],
+          "hashes": [
+            {
+              "alg": "SHA-384",
+              "content": "a2a56e01f5d129aa7b7dd81c098e6eca433af91f46a90f0afeec72f6bc7b1cd42519897590fcd0868d70c7827063cc02"
+            }
+          ],
+          "name": "build/highlight.min.js",
+          "properties": [
+            {
+              "name": "pin:out",
+              "value": "highlightjs__cdn-release/highlight.min.js"
+            },
+            {
+              "name": "pin:type",
+              "value": "script"
+            },
+            {
+              "name": "pin:size",
+              "value": "8000"
+            }
+          ],
+          "type": "file"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/highlightjs/cdn-release"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "abc123def4567890abc123def4567890abc12345"
+        }
+      ],
+      "name": "highlight.js",
+      "purl": "pkg:github/highlightjs/cdn-release@11.11.1?vcs_revision=abc123def4567890abc123def4567890abc12345",
+      "type": "library",
+      "version": "11.11.1"
+    },
+    {
+      "bom-ref": "pkg:npm/htmx.org@2.0.6",
+      "components": [
+        {
+          "bom-ref": "pkg:npm/htmx.org@2.0.6#dist/htmx.min.js",
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js"
+            }
+          ],
+          "hashes": [
+            {
+              "alg": "SHA-384",
+              "content": "a2a56e01f5d129aa7b7dd81c098e6eca433af91f46a90f0afeec72f6bc7b1cd42519897590fcd0868d70c7827063cc02"
+            }
+          ],
+          "name": "dist/htmx.min.js",
+          "properties": [
+            {
+              "name": "pin:out",
+              "value": "htmx.org/htmx.min.js"
+            },
+            {
+              "name": "pin:type",
+              "value": "script"
+            },
+            {
+              "name": "pin:format",
+              "value": "iife"
+            },
+            {
+              "name": "pin:size",
+              "value": "51007"
+            }
+          ],
+          "type": "file"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/bigskysoftware/htmx"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        }
+      ],
+      "name": "htmx.org",
+      "purl": "pkg:npm/htmx.org@2.0.6",
+      "type": "library",
+      "version": "2.0.6"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "pin:lockfile_version",
+        "value": "1"
+      },
+      {
+        "name": "pin:out_dir",
+        "value": "internal/web/static/vendor"
+      }
+    ],
+    "tools": {
+      "components": [
+        {
+          "name": "pin",
+          "type": "application",
+          "version": "test"
+        }
+      ]
+    }
+  },
+  "specVersion": "1.6",
+  "version": 1
+}
