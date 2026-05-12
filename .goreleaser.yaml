@@ -5,6 +5,8 @@ project_name: pin
 before:
   hooks:
     - go mod tidy
+    - go run scripts/generate-man/main.go
+    - go run scripts/generate-docs/main.go
 
 builds:
   - main: ./cmd/pin
@@ -32,6 +34,7 @@ archives:
     files:
       - LICENSE
       - README.md
+      - man/*
 
 checksum:
   name_template: "checksums.txt"
