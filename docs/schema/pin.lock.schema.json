@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/git-pkgs/pin/main/docs/schema/pin.lock.schema.json",
+  "title": "pin.lock",
+  "description": "The pin.lock file format. A CycloneDX 1.6 SBOM with a small set of pin-specific properties under the `pin:` namespace. Normative reference: docs/SPEC.md in github.com/git-pkgs/pin.",
+  "type": "object",
+  "required": ["bomFormat", "specVersion", "version", "metadata", "components"],
+  "additionalProperties": true,
+  "properties": {
+    "bomFormat": {
+      "type": "string",
+      "const": "CycloneDX"
+    },
+    "specVersion": {
+      "type": "string",
+      "const": "1.6"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "components": {
+      "type": "array",
+      "description": "One library component per distinct package, sorted alphabetically by bom-ref.",
+      "items": { "$ref": "#/$defs/library" }
+    }
+  },
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "required": ["tools"],
+      "additionalProperties": true,
+      "properties": {
+        "tools": {
+          "type": "object",
+          "required": ["components"],
+          "properties": {
+            "components": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/toolComponent" }
+            }
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/property" }
+        }
+      }
+    },
+    "toolComponent": {
+      "type": "object",
+      "required": ["type", "name", "version"],
+      "properties": {
+        "type": { "const": "application" },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "library": {
+      "type": "object",
+      "required": ["type", "bom-ref", "name"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "library" },
+        "bom-ref": {
+          "type": "string",
+          "description": "Canonical purl. Equal to the purl field."
+        },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "purl": {
+          "type": "string",
+          "description": "pkg:npm/, pkg:github/, or pkg:generic/."
+        },
+        "hashes": {
+          "type": "array",
+          "description": "Package-level integrity anchor. SHA-512 for npm (tarball hash); SHA-1 for github (commit SHA, hex); SHA-384 for url (per-file TOFU).",
+          "items": { "$ref": "#/$defs/hash" }
+        },
+        "licenses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "license": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "SPDX-normalised license identifier when known."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "externalReferences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/externalReference" }
+        },
+        "properties": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/property" }
+        },
+        "components": {
+          "type": "array",
+          "description": "Nested file components, one per vendored file, sorted alphabetically by bom-ref.",
+          "items": { "$ref": "#/$defs/file" }
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "required": ["type", "bom-ref", "name", "hashes"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "file" },
+        "bom-ref": {
+          "type": "string",
+          "description": "Library purl plus a #<path> subpath fragment."
+        },
+        "name": {
+          "type": "string",
+          "description": "File path inside the source package."
+        },
+        "hashes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Per-file Subresource Integrity hash, hex-encoded. SHA-384 by default.",
+          "items": { "$ref": "#/$defs/hash" }
+        },
+        "externalReferences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/externalReference" }
+        },
+        "properties": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/property" }
+        }
+      }
+    },
+    "hash": {
+      "type": "object",
+      "required": ["alg", "content"],
+      "properties": {
+        "alg": {
+          "type": "string",
+          "enum": ["SHA-1", "SHA-256", "SHA-384", "SHA-512"]
+        },
+        "content": {
+          "type": "string",
+          "description": "Hex-encoded digest."
+        }
+      }
+    },
+    "externalReference": {
+      "type": "object",
+      "required": ["type", "url"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["vcs", "distribution", "attestation"]
+        },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "property": {
+      "type": "object",
+      "required": ["name", "value"],
+      "description": "Properties under the pin: namespace are reserved for this spec. Documented set at schema version 1: pin:lockfile_version, pin:out_dir, pin:out, pin:type, pin:format, pin:size, pin:attestation.predicate_type, pin:attestation.builder_id, pin:attestation.source_repository, pin:attestation.source_revision, pin:attestation.signer_identity.",
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    }
+  }
+}

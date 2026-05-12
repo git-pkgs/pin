@@ -16,6 +16,14 @@ func newVerifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "verify",
 		Short: "Re-hash files on disk against the lockfile",
+		Long: `Walk the manifest's out: directory, re-hash each vendored file, and
+compare against the integrity recorded in pin.lock. Exits 4 on drift or
+missing files.
+
+With --strict, each npm package's tarball is also re-fetched and the
+per-file SHA-384 is re-derived from scratch. Anchors the lockfile back
+to what the registry actually published. Forge and url sources are
+skipped under --strict because their per-file hash is the anchor.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := pin.Verify(opts)
 			if err != nil {

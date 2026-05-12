@@ -12,7 +12,15 @@ func newAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add NAME[@SPEC] [FILE...]",
 		Short: "Add a package to the manifest and sync it",
-		Args:  cobra.MinimumNArgs(1),
+		Long: `Add NAME to pin.yaml at its alphabetic position and run sync.
+SPEC accepts exact pins (1.2.3), semver ranges (^1.0, ~1.2.3), or npm
+dist-tags (latest, next). Without SPEC, the latest version is resolved
+and a caret range one minor below is written (^MAJOR.MINOR).
+
+FILE arguments name the files to vendor from inside the package. If
+omitted, sync uses the entry-point chain (jsdelivr || unpkg ||
+browser || module || main) from the package's package.json.`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			spec := args[0]
 			var files []string

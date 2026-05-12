@@ -30,6 +30,22 @@ func newSyncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Resolve manifest, fetch assets, write lockfile",
+		Long: `Resolve pin.yaml against the registry, fetch the requested files,
+verify their integrity, and write pin.lock plus the vendored files under
+the manifest's out: directory.
+
+Lock-is-sticky: a locked version that still satisfies its manifest
+constraint is reused without re-resolution. Use ` + "`pin update`" + ` to
+bump within a range.
+
+Common CI flags:
+
+  --frozen          bail before any network if manifest and lockfile disagree
+  --no-fetch        frozen + re-hash on-disk files against the lockfile;
+                    no network, no writes
+  --concurrency N   cap parallel resolves (default 8)
+  --verify-provenance  cryptographically verify each sigstore attestation
+                       bundle against the live Sigstore TUF trust root`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !opts.Frozen {
 				if ci := detectCI(); ci != "" {

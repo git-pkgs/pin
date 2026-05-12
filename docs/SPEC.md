@@ -10,6 +10,20 @@ reading any code.
 
 Schema version: **1**.
 
+A JSON Schema (Draft 2020-12) is published alongside this document at
+[`schema/pin.lock.schema.json`](schema/pin.lock.schema.json). Validators
+can pull it directly from
+`https://raw.githubusercontent.com/git-pkgs/pin/main/docs/schema/pin.lock.schema.json`.
+
+### Target CycloneDX spec version
+
+`specVersion` is fixed at `1.6` (the version pin produces today). CycloneDX
+1.7 (October 2025, ECMA-424 2nd ed.) is schema-compatible with what pin
+emits — every field pin uses appears identically in 1.6 and 1.7 — but
+consumer tooling support for 1.7 still lags. Pin stays on 1.6 until the
+ecosystem majority has 1.7 support; the bump is additive and will not
+require a schema-version bump on `pin.lock`'s side.
+
 ## Top-level
 
 ```json

@@ -16,6 +16,16 @@ func newOutdatedCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "outdated",
 		Short: "Compare locked versions against the registry's latest",
+		Long: `Report each locked package against the registry's current state.
+Severity tiers: yanked (exit 9) > provenance-downgrade > deprecated >
+behind > ok. Behind / deprecated / yanked exit non-zero unless
+--exit-zero is set.
+
+The NOTES column surfaces informational signals that don't affect
+exit code: license drift between locked and latest, packages whose
+last publish is older than a year (unmaintained), and packages whose
+latest version gained a SLSA attestation since the lockfile was
+written (provenance available).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reports, err := pin.Outdated(cmd.Context(), opts)
 			if err != nil {
