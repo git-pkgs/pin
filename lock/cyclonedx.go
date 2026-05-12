@@ -20,17 +20,25 @@ const (
 	propSize            = "pin:size"
 )
 
+// Struct fields below are ordered by their JSON tag name. That makes
+// encoding/json's natural output order canonical (json.Marshal emits
+// struct fields in source order; map keys it sorts alphabetically; the
+// SBOM has no maps). Skipping the previous Marshal → Unmarshal-to-any
+// → Re-encode round-trip drops ~half the lock.Write allocations at
+// 1000-asset scale. The "Keys sorted alphabetically within every
+// object" guarantee in SPEC.md is preserved by holding this ordering
+// invariant — any new field must be inserted in alphabetical position.
 type cdxBOM struct {
 	BOMFormat   string         `json:"bomFormat"`
+	Components  []cdxComponent `json:"components"`
+	Metadata    cdxMetadata    `json:"metadata"`
 	SpecVersion string         `json:"specVersion"`
 	Version     int            `json:"version"`
-	Metadata    cdxMetadata    `json:"metadata"`
-	Components  []cdxComponent `json:"components"`
 }
 
 type cdxMetadata struct {
-	Tools      cdxTools      `json:"tools"`
 	Properties []cdxProperty `json:"properties,omitempty"`
+	Tools      cdxTools      `json:"tools"`
 }
 
 type cdxTools struct {
@@ -38,23 +46,23 @@ type cdxTools struct {
 }
 
 type cdxToolComponent struct {
-	Type    string `json:"type"`
 	Name    string `json:"name"`
+	Type    string `json:"type"`
 	Version string `json:"version"`
 }
 
 type cdxComponent struct {
-	Type               string         `json:"type"`
 	BOMRef             string         `json:"bom-ref"`
-	Name               string         `json:"name"`
-	Version            string         `json:"version,omitempty"`
-	PURL               string         `json:"purl,omitempty"`
+	Components         []cdxComponent `json:"components,omitempty"`
+	Evidence           *cdxEvidence   `json:"evidence,omitempty"`
+	ExternalReferences []cdxExtRef    `json:"externalReferences,omitempty"`
 	Hashes             []cdxHash      `json:"hashes,omitempty"`
 	Licenses           []cdxLicense   `json:"licenses,omitempty"`
-	ExternalReferences []cdxExtRef    `json:"externalReferences,omitempty"`
+	Name               string         `json:"name"`
 	Properties         []cdxProperty  `json:"properties,omitempty"`
-	Evidence           *cdxEvidence   `json:"evidence,omitempty"`
-	Components         []cdxComponent `json:"components,omitempty"`
+	PURL               string         `json:"purl,omitempty"`
+	Type               string         `json:"type"`
+	Version            string         `json:"version,omitempty"`
 }
 
 type cdxEvidence struct {
@@ -68,8 +76,8 @@ type cdxIdentity struct {
 }
 
 type cdxIdentityMethod struct {
-	Technique  string `json:"technique"`
 	Confidence string `json:"confidence,omitempty"`
+	Technique  string `json:"technique"`
 	Value      string `json:"value,omitempty"`
 }
 

@@ -98,33 +98,15 @@ func Read(r io.Reader) (*Lock, error) {
 
 func Write(w io.Writer, l *Lock, toolName, toolVersion string) error {
 	bom := toCDX(l, toolName, toolVersion)
-	raw, err := json.Marshal(bom)
-	if err != nil {
-		return err
-	}
-	stable, err := canonicalize(raw)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(stable)
-	return err
-}
-
-// canonicalize re-encodes JSON with alphabetically sorted keys at every level,
-// two-space indent, LF endings, and a trailing newline.
-func canonicalize(raw []byte) ([]byte, error) {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, err
-	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		return nil, err
+	if err := enc.Encode(bom); err != nil {
+		return err
 	}
-	return buf.Bytes(), nil
+	_, err := w.Write(buf.Bytes())
+	return err
 }
 
 type Changes struct {
