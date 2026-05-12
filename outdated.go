@@ -11,12 +11,17 @@ import (
 	"github.com/git-pkgs/vers"
 )
 
+// OutdatedOptions configures pin.Outdated / Client.Outdated.
 type OutdatedOptions struct {
 	Dir         string
 	Lock        string
 	RegistryURL string
 }
 
+// OutdatedReport is one row of pin.Outdated: the locked version
+// against the registry's current state, with the most-severe finding
+// surfaced via Severity (one of "ok" / "behind" / "deprecated" /
+// "provenance-downgrade" / "yanked").
 type OutdatedReport struct {
 	Name                string
 	Locked              string
@@ -128,6 +133,10 @@ const (
 	ExitYanked   = 9
 )
 
+// OutdatedExitCode collapses a slice of OutdatedReport into the CLI
+// exit code: ExitYanked (9) wins over ExitOutdated (7) wins over 0.
+// Exported so library consumers driving the CLI from Go can mirror
+// the exit-code semantics.
 func OutdatedExitCode(reports []OutdatedReport) int {
 	code := 0
 	for _, r := range reports {

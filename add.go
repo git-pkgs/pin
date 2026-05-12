@@ -11,6 +11,7 @@ import (
 	"github.com/git-pkgs/pin/manifest"
 )
 
+// AddOptions configures pin.Add / Client.Add.
 type AddOptions struct {
 	Dir         string
 	Manifest    string
@@ -20,6 +21,9 @@ type AddOptions struct {
 	DryRun      bool
 }
 
+// AddResult is the result of pin.Add: the inserted manifest entry,
+// the registry-resolved version string, and the synchronous Sync run
+// the inserted entry triggered (nil under --dry-run).
 type AddResult struct {
 	Entry      manifest.Entry
 	Resolved   string

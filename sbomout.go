@@ -9,6 +9,7 @@ import (
 	"github.com/git-pkgs/sbom"
 )
 
+// SBOMFormat selects the on-wire SBOM encoding pin.SBOM emits.
 type SBOMFormat string
 
 const (
@@ -17,6 +18,9 @@ const (
 	SBOMSPDXJSON      SBOMFormat = "spdx"
 )
 
+// SBOMOptions configures pin.SBOM. Format defaults to CycloneDX
+// (the lockfile's native shape, emitted byte-for-byte); SPDX and
+// CycloneDX-XML reshapes happen via git-pkgs/sbom.
 type SBOMOptions struct {
 	Dir    string
 	Lock   string

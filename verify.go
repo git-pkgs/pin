@@ -18,6 +18,8 @@ import (
 	"github.com/git-pkgs/purl"
 )
 
+// VerifyOptions configures pin.Verify / Client.Verify. Strict turns
+// the cheap on-disk re-hash into a tarball re-derive for npm assets.
 type VerifyOptions struct {
 	Dir         string
 	Lock        string
@@ -25,6 +27,9 @@ type VerifyOptions struct {
 	RegistryURL string
 }
 
+// VerifyResult collects the per-asset findings of a verify pass.
+// Failed reports whether any drift or missing-file was seen; extras
+// are reported but don't fail verify unless VerifyOptions.Strict.
 type VerifyResult struct {
 	OK      []string
 	Missing []string
@@ -32,6 +37,8 @@ type VerifyResult struct {
 	Extra   []string
 }
 
+// Drift describes one vendored file whose on-disk SHA-384 differs
+// from the integrity recorded in the lockfile.
 type Drift struct {
 	Out      string
 	Expected string

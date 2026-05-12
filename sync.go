@@ -32,8 +32,16 @@ const (
 	filePerm = 0o644
 )
 
+// ToolVersion is the tool-version string written to pin.lock's
+// metadata.tools[]. Overridden at build time via the
+// `-X github.com/git-pkgs/pin.ToolVersion=X.Y.Z` ldflag.
 var ToolVersion = "dev"
 
+// SyncOptions configures pin.Sync / Client.Sync. Per-call fields
+// (DryRun, Frozen, Update, ...) belong here; client-config fields
+// (RegistryURL, Forge, ...) are honoured by the top-level pin.Sync
+// shim only — pass them via ClientOptions when constructing a Client
+// directly.
 type SyncOptions struct {
 	Dir         string
 	Manifest    string
@@ -95,6 +103,9 @@ func (o *SyncOptions) forceResolve(name string) bool {
 	return o.UpdateAll || slices.Contains(o.Update, name)
 }
 
+// SyncResult is the outcome of pin.Sync: the resolved lockfile, the
+// diff against the previous lockfile, and the paths written and
+// removed under the manifest's out: directory.
 type SyncResult struct {
 	Lock    *lock.Lock
 	Changes lock.Changes

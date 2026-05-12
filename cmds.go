@@ -17,6 +17,10 @@ const initTemplate = `out: "static/vendor"
 assets: []
 `
 
+// Init writes a starter pin.yaml in dir. manifestPath overrides the
+// default filename ("pin.yaml") when non-empty. Returns an error if
+// the destination already exists; pin will not overwrite an existing
+// manifest.
 func Init(dir, manifestPath string) error {
 	if manifestPath == "" {
 		manifestPath = DefaultManifest
@@ -67,6 +71,8 @@ func (c *Client) Remove(ctx context.Context, names []string, opts SyncOptions) (
 	return c.Sync(ctx, opts)
 }
 
+// ListEntry is one row of the `pin list` output: the name, version,
+// asset type, on-disk path, and integrity recorded in the lockfile.
 type ListEntry struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`
@@ -78,6 +84,8 @@ type ListEntry struct {
 	Size      int64  `json:"size"`
 }
 
+// List returns one ListEntry per vendored file recorded in the
+// lockfile. Returns ErrNoLockfile if no lockfile exists at opts.Lock.
 func List(opts VerifyOptions) ([]ListEntry, error) {
 	if opts.Lock == "" {
 		opts.Lock = DefaultLock
@@ -105,6 +113,9 @@ func List(opts VerifyOptions) ([]ListEntry, error) {
 	return out, nil
 }
 
+// Path returns the on-disk paths for every vendored file belonging
+// to the named package. Errors when no lockfile exists or the name
+// isn't recorded.
 func Path(name string, opts VerifyOptions) ([]string, error) {
 	if opts.Lock == "" {
 		opts.Lock = DefaultLock
