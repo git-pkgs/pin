@@ -139,15 +139,8 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 
 	changes := lock.Diff(prev, next)
 
-	if opts.StrictProvenance {
-		if err := assertProvenance(next); err != nil {
-			return nil, err
-		}
-	}
-	if opts.RequirePublisherMatchesRepository {
-		if err := assertPublisherMatchesRepository(next); err != nil {
-			return nil, err
-		}
+	if err := enforceTrust(m, next, opts); err != nil {
+		return nil, err
 	}
 
 	var removed []string
@@ -472,36 +465,75 @@ func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]
 	return nil
 }
 
-// assertPublisherMatchesRepository requires that, for every asset with
-// a recorded attestation, the attestation's source repository matches
-// the package's declared repository.url. This is the consumer-side check
-// against a leaked publish token: an attacker can produce a syntactically
-// valid attestation from their own CI, but the source_repository field
-// will not match the legitimate package's repo.
-func assertPublisherMatchesRepository(l *lock.Lock) error {
+// enforceTrust applies the manifest trust block plus CLI overrides
+// (--strict-provenance, --require-publisher-matches-repository) to each
+// entry. Per-entry trust overrides the manifest top level; CLI flags
+// override both (you can't opt an entry out of a flag-forced policy).
+// trusted_workflows is additive: any workflow URI listed there satisfies
+// the publisher-matches-repository check even when the package's
+// repository.url disagrees.
+func enforceTrust(m *manifest.Manifest, l *lock.Lock, opts SyncOptions) error {
+	entryByName := map[string]*manifest.Entry{}
+	for i := range m.Assets {
+		entryByName[m.Assets[i].Name] = &m.Assets[i]
+	}
+
+	var missing, mismatches []string
 	seen := map[string]bool{}
-	var mismatches []string
 	for _, a := range l.Assets {
 		if seen[a.Name] {
 			continue
 		}
 		seen[a.Name] = true
-		if a.Attestation == nil {
-			continue
+
+		t := manifest.Trust{}
+		if e := entryByName[a.Name]; e != nil {
+			t = m.EffectiveTrust(e)
 		}
-		want := normaliseRepoURL(a.SourceRepository)
-		got := normaliseRepoURL(a.Attestation.SourceRepository)
-		if want == "" || got == "" {
-			continue
+		if opts.StrictProvenance {
+			yes := true
+			t.RequireProvenance = &yes
 		}
-		if want != got {
-			mismatches = append(mismatches, fmt.Sprintf("%s@%s: attestation built from %s but package.json says %s", a.Name, a.Version, got, want))
+		if opts.RequirePublisherMatchesRepository {
+			yes := true
+			t.RequirePublisherMatchesRepository = &yes
 		}
+
+		if manifest.BoolValue(t.RequireProvenance) && strings.HasPrefix(a.PURL, "pkg:npm/") && a.Attestation == nil {
+			missing = append(missing, a.Name+"@"+a.Version)
+		}
+
+		if manifest.BoolValue(t.RequirePublisherMatchesRepository) && a.Attestation != nil {
+			if msg := publisherMismatch(&a, t.TrustedWorkflows); msg != "" {
+				mismatches = append(mismatches, msg)
+			}
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("require_provenance: no attestation recorded for: %s", strings.Join(missing, ", "))
 	}
 	if len(mismatches) > 0 {
-		return fmt.Errorf("--require-publisher-matches-repository: %s", strings.Join(mismatches, "; "))
+		return fmt.Errorf("require_publisher_matches_repository: %s", strings.Join(mismatches, "; "))
 	}
 	return nil
+}
+
+// publisherMismatch returns the error message when the attestation's
+// source repository doesn't match the package's declared repository,
+// or empty when it does or the trusted_workflows allowlist permits it.
+func publisherMismatch(a *lock.Asset, trustedWorkflows []string) string {
+	want := normaliseRepoURL(a.SourceRepository)
+	got := normaliseRepoURL(a.Attestation.SourceRepository)
+	if want == "" || got == "" || want == got {
+		return ""
+	}
+	for _, wf := range trustedWorkflows {
+		if a.Attestation.BuilderID == wf || strings.HasPrefix(a.Attestation.BuilderID, wf+"@") {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s@%s: attestation built from %s but package.json says %s", a.Name, a.Version, got, want)
 }
 
 // normaliseRepoURL strips a leading https:// (or http://), trailing .git,
@@ -513,27 +545,6 @@ func normaliseRepoURL(u string) string {
 	u = strings.TrimPrefix(u, "https://")
 	u = strings.TrimPrefix(u, "http://")
 	return strings.ToLower(u)
-}
-
-func assertProvenance(l *lock.Lock) error {
-	seen := map[string]bool{}
-	var missing []string
-	for _, a := range l.Assets {
-		if seen[a.Name] {
-			continue
-		}
-		seen[a.Name] = true
-		if !strings.HasPrefix(a.PURL, "pkg:npm/") {
-			continue // only npm carries SLSA attestations today
-		}
-		if a.Attestation == nil {
-			missing = append(missing, a.Name+"@"+a.Version)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("--strict-provenance: no attestation recorded for: %s", strings.Join(missing, ", "))
-	}
-	return nil
 }
 
 func lockedVersionsByName(l *lock.Lock) map[string]string {

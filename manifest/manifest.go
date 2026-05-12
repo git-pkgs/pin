@@ -22,6 +22,7 @@ type Manifest struct {
 	Out           string    `yaml:"out"`
 	Layout        Layout    `yaml:"layout"`
 	MinReleaseAge *Duration `yaml:"min_release_age"`
+	Trust         *Trust    `yaml:"trust"`
 	Assets        []Entry   `yaml:"assets"`
 }
 
@@ -32,8 +33,67 @@ type Entry struct {
 	Files         []string  `yaml:"files"`
 	Format        string    `yaml:"format"`
 	MinReleaseAge *Duration `yaml:"min_release_age"`
+	Trust         *Trust    `yaml:"trust"`
 
 	src Source
+}
+
+// Trust collects the provenance-verification policy for the manifest or
+// for a single entry. Nil pointers on RequireProvenance and
+// RequirePublisherMatchesRepository let the manifest default propagate;
+// nil on the slice fields means "use the parent's list" rather than
+// "explicitly empty."
+type Trust struct {
+	RequireProvenance                 *bool    `yaml:"require_provenance"`
+	RequirePublisherMatchesRepository *bool    `yaml:"require_publisher_matches_repository"`
+	TrustedIssuers                    []string `yaml:"trusted_issuers"`
+	TrustedWorkflows                  []string `yaml:"trusted_workflows"`
+}
+
+// EffectiveTrust resolves the trust policy for an entry: per-entry
+// scalar overrides win over the manifest top level; the slice fields
+// merge (entry's plus manifest's, deduped).
+func (m *Manifest) EffectiveTrust(e *Entry) Trust {
+	var out Trust
+	if m.Trust != nil {
+		out = *m.Trust
+	}
+	if e.Trust == nil {
+		return out
+	}
+	if e.Trust.RequireProvenance != nil {
+		out.RequireProvenance = e.Trust.RequireProvenance
+	}
+	if e.Trust.RequirePublisherMatchesRepository != nil {
+		out.RequirePublisherMatchesRepository = e.Trust.RequirePublisherMatchesRepository
+	}
+	out.TrustedIssuers = mergeUnique(out.TrustedIssuers, e.Trust.TrustedIssuers)
+	out.TrustedWorkflows = mergeUnique(out.TrustedWorkflows, e.Trust.TrustedWorkflows)
+	return out
+}
+
+func mergeUnique(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, s := range a {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	for _, s := range b {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// BoolValue is a helper so callers can write t.Require(t.RequireProvenance)
+// rather than dereference-and-default boilerplate.
+func BoolValue(b *bool) bool {
+	return b != nil && *b
 }
 
 // DefaultMinReleaseAge is the default cooldown window applied when the
@@ -132,6 +192,7 @@ var allowedEntryKeys = map[string]bool{
 	keyFiles:          true,
 	keyFormat:         true,
 	"min_release_age": true,
+	"trust":           true,
 }
 
 // strictAssets walks each asset's mapping node and rejects keys not in
