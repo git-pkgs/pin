@@ -128,6 +128,54 @@ func TestFormat(t *testing.T) {
 	}
 }
 
+func TestStripSourcemapURL(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{
+			"line comment",
+			"console.log(1);\n//# sourceMappingURL=app.js.map\n",
+			"console.log(1);\n\n",
+		},
+		{
+			"line comment @ variant",
+			"console.log(1);\n//@ sourceMappingURL=app.js.map\n",
+			"console.log(1);\n\n",
+		},
+		{
+			"block comment",
+			"console.log(1);\n/*# sourceMappingURL=app.js.map */",
+			"console.log(1);\n",
+		},
+		{
+			"data URL inline",
+			"x;\n//# sourceMappingURL=data:application/json;base64,AAAA\n",
+			"x;\n\n",
+		},
+		{
+			"no directive",
+			"console.log(1);\n",
+			"console.log(1);\n",
+		},
+		{
+			// Line directive is anchored to the start of a line (with
+			// optional leading whitespace), so an inline-string match
+			// shouldn't be stripped.
+			"inline string literal — not a directive, left alone",
+			`var s = "//# sourceMappingURL=fake";`,
+			`var s = "//# sourceMappingURL=fake";`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(StripSourcemapURL([]byte(tc.in)))
+			if got != tc.want {
+				t.Errorf("StripSourcemapURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStripStringsAndComments(t *testing.T) {
 	cases := []struct {
 		in, want string

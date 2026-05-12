@@ -86,6 +86,7 @@ func New(opts ClientOptions) *Client {
 
 	rc := rclient.NewClient()
 	rc.HTTPClient = httpClient
+	rc.UserAgent = userAgent()
 
 	npmS := npm.New(npm.Options{
 		HTTPClient:    rc,
@@ -136,6 +137,14 @@ func (c *Client) RegisterResolver(purlType string, r source.Resolver) {
 //nolint:ireturn // the plug-in surface is interface-typed by design
 func (c *Client) Resolver(purlType string) source.Resolver {
 	return c.resolvers[purlType]
+}
+
+// userAgent returns the User-Agent string pin sets on every outbound
+// HTTP request. Includes the running tool version and a contact URL
+// so registry and CDN operators can attribute load and reach the
+// project if there's a problem.
+func userAgent() string {
+	return "pin/" + ToolVersion + " (+https://github.com/git-pkgs/pin)"
 }
 
 // loadTrustedRoot returns the Sigstore TUF trust root, caching it

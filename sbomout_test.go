@@ -22,6 +22,28 @@ func TestSBOMCycloneDXPassthrough(t *testing.T) {
 	}
 }
 
+func TestSBOM_StripPinProperties(t *testing.T) {
+	dir, _ := setupSynced(t)
+	var with, without bytes.Buffer
+	if err := SBOM(&with, SBOMOptions{Dir: dir, Format: SBOMCycloneDXJSON}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SBOM(&without, SBOMOptions{Dir: dir, Format: SBOMCycloneDXJSON, StripPinProperties: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(with.String(), `"name": "pin:`) {
+		t.Fatalf("baseline SBOM should still contain pin: properties:\n%s", with.String())
+	}
+	if strings.Contains(without.String(), `"name": "pin:`) {
+		t.Errorf("--strip-pin output should not contain pin: properties:\n%s", without.String())
+	}
+	// Non-pin: properties (like CycloneDX-standard fields) must survive.
+	if !strings.Contains(without.String(), `"bomFormat"`) {
+		t.Error("strip should not affect non-pin fields")
+	}
+}
+
 func TestSBOMSPDX(t *testing.T) {
 	dir, _ := setupSynced(t)
 	var buf bytes.Buffer

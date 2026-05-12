@@ -2,6 +2,8 @@ package pin
 
 import (
 	"context"
+	"crypto/sha512"
+	"encoding/base64"
 	"fmt"
 	"path"
 
@@ -12,6 +14,32 @@ import (
 	"github.com/git-pkgs/pin/source"
 	"github.com/git-pkgs/pin/source/npm"
 )
+
+// maybeStripSourcemap applies the manifest's strip_sourcemap setting
+// to a fetched file. When the entry has strip_sourcemap: true and the
+// file is a script or style, every sourceMappingURL directive is
+// removed and the SHA-384 integrity is recomputed over the stripped
+// bytes — the lockfile's recorded integrity must match what lands on
+// disk so verify-on-checkout doesn't fail.
+func maybeStripSourcemap(f source.ResolvedFile, e *manifest.Entry) source.ResolvedFile {
+	if !e.StripSourcemap {
+		return f
+	}
+	switch lock.ClassifyType(f.Path) {
+	case lock.TypeScript, lock.TypeStyle:
+	default:
+		return f
+	}
+	stripped := sniff.StripSourcemapURL(f.Content)
+	if len(stripped) == len(f.Content) {
+		return f
+	}
+	h := sha512.Sum384(stripped)
+	f.Content = stripped
+	f.Size = int64(len(stripped))
+	f.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(h[:])
+	return f
+}
 
 // fileContent is the resolver-to-writer handoff: where the bytes should
 // land on disk relative to the manifest's out: directory, and the bytes
@@ -56,6 +84,7 @@ func (c *Client) resolveURLEntry(ctx context.Context, m *manifest.Manifest, e *m
 	files := make([]fileContent, 0, len(resolved.Files))
 
 	for _, f := range resolved.Files {
+		f = maybeStripSourcemap(f, e)
 		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
 		assetType := lock.ClassifyType(f.Path)
 		format := e.Format
@@ -106,6 +135,7 @@ func (c *Client) resolveNPMEntry(ctx context.Context, m *manifest.Manifest, e *m
 	att := toLockAttestation(resolved.Attestation)
 
 	for _, f := range resolved.Files {
+		f = maybeStripSourcemap(f, e)
 		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
 		assetType := lock.ClassifyType(f.Path)
 		format := e.Format
@@ -165,6 +195,7 @@ func (c *Client) resolveForgeEntry(ctx context.Context, m *manifest.Manifest, e 
 	att := toLockAttestation(resolved.Attestation)
 
 	for _, f := range resolved.Files {
+		f = maybeStripSourcemap(f, e)
 		out := outputPath(m.Layout, slug, resolved.Version, f.Path)
 		assetType := lock.ClassifyType(f.Path)
 		format := e.Format

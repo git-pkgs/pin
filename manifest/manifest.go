@@ -27,13 +27,14 @@ type Manifest struct {
 }
 
 type Entry struct {
-	Name          string    `yaml:"name"`
-	Version       string    `yaml:"version"`
-	RawSource     string    `yaml:"source"`
-	Files         []string  `yaml:"files"`
-	Format        string    `yaml:"format"`
-	MinReleaseAge *Duration `yaml:"min_release_age"`
-	Trust         *Trust    `yaml:"trust"`
+	Name           string    `yaml:"name"`
+	Version        string    `yaml:"version"`
+	RawSource      string    `yaml:"source"`
+	Files          []string  `yaml:"files"`
+	Format         string    `yaml:"format"`
+	MinReleaseAge  *Duration `yaml:"min_release_age"`
+	Trust          *Trust    `yaml:"trust"`
+	StripSourcemap bool      `yaml:"strip_sourcemap"`
 
 	src Source
 }
@@ -188,6 +189,7 @@ var allowedEntryKeys = map[string]bool{
 	keyFormat:         true,
 	"min_release_age": true,
 	"trust":           true,
+	"strip_sourcemap": true,
 }
 
 // strictAssets walks each asset's mapping node and rejects keys not in

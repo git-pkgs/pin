@@ -24,6 +24,22 @@ const (
 	delimLen     = 2
 )
 
+// reSourceMappingURL matches a sourceMappingURL directive in either of
+// its two forms: a line comment "//# sourceMappingURL=..." (or //@) at
+// the end of a line, or a block comment "/*# sourceMappingURL=... */".
+// Both forms get stripped by StripSourcemapURL when an entry opts in
+// via manifest's strip_sourcemap: true. Browsers only honour the LAST
+// occurrence, but stripping all of them is safe and simpler.
+var reSourceMappingURL = regexp.MustCompile(`(?m)(^[\t ]*//[#@]\s+sourceMappingURL=[^\r\n]*$|/\*[#@]\s+sourceMappingURL=[^*]*\*+(?:[^/*][^*]*\*+)*/)`)
+
+// StripSourcemapURL removes every sourceMappingURL directive from a
+// JavaScript source. Returned bytes preserve newlines around the
+// stripped region so line numbers in stack traces still roughly line
+// up with the original source.
+func StripSourcemapURL(src []byte) []byte {
+	return reSourceMappingURL.ReplaceAll(src, nil)
+}
+
 var (
 	reTypeofDefine = regexp.MustCompile(`\btypeof\s+define\b`)
 	reDefineAMD    = regexp.MustCompile(`\bdefine\.amd\b`)

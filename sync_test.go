@@ -793,6 +793,48 @@ assets:
 	}
 }
 
+// TestSync_StripSourcemap asserts that strip_sourcemap: true at the
+// entry level removes sourceMappingURL directives from vendored
+// scripts AND that the lockfile's integrity is for the stripped
+// bytes — so verify on a clean checkout doesn't fail.
+func TestSync_StripSourcemap(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{
+		"dist/x.js": "console.log(1);\n//# sourceMappingURL=x.js.map\n",
+	})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+    strip_sourcemap: true
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	onDisk, err := os.ReadFile(filepath.Join(dir, "v/demo/x.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(onDisk), "sourceMappingURL") {
+		t.Errorf("on-disk content still contains sourceMappingURL:\n%s", onDisk)
+	}
+	if want := "console.log(1);\n\n"; string(onDisk) != want {
+		t.Errorf("on-disk content = %q, want %q", onDisk, want)
+	}
+
+	// Verify reads the lockfile-recorded integrity and compares against
+	// the on-disk bytes. If strip recomputed integrity correctly, this
+	// passes; if integrity points at the pre-strip bytes, this fails.
+	vr, err := Verify(VerifyOptions{Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vr.Failed() {
+		t.Errorf("verify failed after strip — integrity not recomputed over stripped bytes: %+v", vr)
+	}
+}
+
 func TestSyncDryRun(t *testing.T) {
 	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
 	dir := t.TempDir()

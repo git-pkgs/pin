@@ -32,5 +32,6 @@ func newSBOMCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Lock, "lock", pin.DefaultLock, "lockfile path")
 	cmd.Flags().StringVarP(&format, "format", "f", string(pin.SBOMCycloneDXJSON), "output format: cyclonedx, cyclonedx-xml, spdx")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "write to file instead of stdout")
+	cmd.Flags().BoolVar(&opts.StripPinProperties, "strip-pin", false, "drop pin: namespace properties from the emitted SBOM (for downstream consumers that don't recognise them)")
 	return cmd
 }
