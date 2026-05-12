@@ -22,6 +22,7 @@ import (
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
+	"github.com/git-pkgs/pin/source/sigstoreverifier"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/tuf"
 )
@@ -191,20 +192,22 @@ type sources struct {
 
 func buildSources(opts SyncOptions) (sources, error) {
 	npmOpts := npm.Options{
-		RegistryURL:      opts.RegistryURL,
-		VerifyProvenance: opts.VerifyProvenance,
-		SignatureMode:    opts.SignatureMode,
+		RegistryURL:   opts.RegistryURL,
+		SignatureMode: opts.SignatureMode,
 	}
+	forgeOpts := opts.Forge
 	if opts.VerifyProvenance {
 		tr, err := loadTrustedRoot()
 		if err != nil {
 			return sources{}, fmt.Errorf("--verify-provenance: load Sigstore trust root: %w", err)
 		}
-		npmOpts.TrustedRoot = tr
+		v := sigstoreverifier.New(tr)
+		npmOpts.Verifier = v
+		forgeOpts.Verifier = v
 	}
 	return sources{
 		npm:    npm.New(npmOpts),
-		forge:  forge.New(opts.Forge),
+		forge:  forge.New(forgeOpts),
 		rawurl: rawurl.New(rawurl.Options{}),
 	}, nil
 }

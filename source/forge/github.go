@@ -36,7 +36,14 @@ func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string
 			Content:   body,
 		})
 		if attestation == nil {
-			if att := s.fetchGitHubAttestation(ctx, owner, repo, body); att != nil {
+			att, raw := s.fetchGitHubAttestation(ctx, owner, repo, body)
+			if att != nil {
+				if s.opts.Verifier != nil {
+					digest := sha256.Sum256(body)
+					if err := s.opts.Verifier.VerifyBundle(ctx, raw, "sha256", digest[:]); err != nil {
+						return nil, fmt.Errorf("%s/%s@%s: provenance verification failed for %s: %w", owner, repo, ref, path, err)
+					}
+				}
 				attestation = att
 			}
 		}
@@ -54,12 +61,12 @@ func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string
 }
 
 // fetchGitHubAttestation queries GitHub's attestations API for a file's
-// SHA-256 digest. Returns nil when no attestation is recorded for these
-// bytes (the common case for individual repo files; attestations
-// typically attach to release-asset archives). A network error here is
-// treated as "no attestation" rather than a sync failure — the
-// attestation is supplementary metadata, not a fetch dependency.
-func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string, body []byte) *Attestation {
+// SHA-256 digest. Returns the parsed Attestation and the raw bundle bytes
+// (for cryptographic verification by the caller), or (nil, nil) when no
+// matching SLSA Provenance v1 bundle exists. A network error is treated
+// as "no attestation" rather than a sync failure — the attestation is
+// supplementary metadata, not a fetch dependency.
+func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string, body []byte) (*Attestation, []byte) {
 	digest := sha256.Sum256(body)
 	url := fmt.Sprintf("%s/repos/%s/%s/attestations/sha256:%s",
 		strings.TrimRight(s.opts.GitHubAPI, "/"), owner, repo, hex.EncodeToString(digest[:]))
@@ -69,7 +76,7 @@ func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string,
 		} `json:"attestations"`
 	}
 	if err := s.http.GetJSON(ctx, url, &list); err != nil {
-		return nil
+		return nil, nil
 	}
 	for _, a := range list.Attestations {
 		att, err := parseGitHubBundle(a.Bundle)
@@ -79,9 +86,9 @@ func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string,
 		if !strings.HasPrefix(att.PredicateType, "https://slsa.dev/provenance/") {
 			continue
 		}
-		return att
+		return att, a.Bundle
 	}
-	return nil
+	return nil, nil
 }
 
 func (s *Source) githubResolveSHA(ctx context.Context, owner, repo, ref string) (string, error) {

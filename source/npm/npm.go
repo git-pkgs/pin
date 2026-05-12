@@ -15,7 +15,6 @@ import (
 	"github.com/git-pkgs/archives"
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
-	"github.com/sigstore/sigstore-go/pkg/root"
 
 	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
@@ -24,6 +23,9 @@ import (
 const (
 	DefaultRegistryURL     = "https://registry.npmjs.org"
 	DefaultMaxTarballBytes = 100 << 20 // 100 MiB
+
+	// algSHA512 is the SRI / sigstore-policy name for the tarball anchor.
+	algSHA512 = "sha512"
 )
 
 var entryPointFields = []string{"jsdelivr", "unpkg", "browser", "module", "main"} //nolint:goconst
@@ -33,10 +35,10 @@ type Options struct {
 	MaxTarballBytes int64
 	HTTPClient      *client.Client
 
-	// VerifyProvenance turns on cryptographic verification of the sigstore
-	// bundle for each version with an attestation. Requires TrustedRoot.
-	VerifyProvenance bool
-	TrustedRoot      *root.TrustedRoot
+	// Verifier, when non-nil, validates each attestation bundle the npm
+	// path records. Nil = record-only (the v0.1 behaviour); a non-nil
+	// verifier promotes attestations to a hard fetch dependency.
+	Verifier source.ProvenanceVerifier
 
 	// SignatureMode controls verification of npm's dist.signatures (the
 	// ECDSA signature over {name}@{version}:{integrity}). Default warn.
@@ -132,11 +134,9 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 
 	att, attBundle, _ := s.fetchAttestationWithBundle(ctx, json.RawMessage(metaRaw))
 
-	if att != nil && s.opts.VerifyProvenance {
-		if s.opts.TrustedRoot == nil {
-			return nil, fmt.Errorf("%s@%s: --verify-provenance requires a Sigstore trust root", name, version)
-		}
-		if err := VerifyAttestation(attBundle, tarball, s.opts.TrustedRoot); err != nil {
+	if att != nil && s.opts.Verifier != nil {
+		digest := sha512.Sum512(tarball)
+		if err := s.opts.Verifier.VerifyBundle(ctx, attBundle, algSHA512, digest[:]); err != nil {
 			return nil, fmt.Errorf("%s@%s: provenance verification failed: %w", name, version, err)
 		}
 	}
@@ -185,7 +185,7 @@ func verifyTarball(tarball []byte, wantSRI string) error {
 		return nil
 	}
 	alg, b64, ok := strings.Cut(wantSRI, "-")
-	if !ok || strings.ToLower(alg) != "sha512" {
+	if !ok || strings.ToLower(alg) != algSHA512 {
 		return fmt.Errorf("registry integrity %q: only sha512 is supported", wantSRI)
 	}
 	got := sha512.Sum512(tarball)

@@ -57,3 +57,21 @@ type ResolvedFile struct {
 	URL       string
 	Content   []byte
 }
+
+// ProvenanceVerifier validates a provenance attestation's cryptographic
+// envelope against the claimed artifact bytes. The bundle body is the
+// raw JSON of the attestation envelope (DSSE/in-toto/sigstore-shape);
+// digestAlg is "sha256" or "sha512"; digest is the raw bytes of that
+// hash over the artifact the attestation's subject points at.
+//
+// Implementations:
+//
+//   - source/sigstoreverifier — sigstore-go via Sigstore's TUF trust
+//     root. The default; handles both npm tarball (sha512) and GitHub
+//     artifact (sha256) attestations.
+//
+// Future implementations (witness, SBOMit, plain in-toto) plug in here
+// without changing source/npm or source/forge.
+type ProvenanceVerifier interface {
+	VerifyBundle(ctx context.Context, bundleBody []byte, digestAlg string, digest []byte) error
+}

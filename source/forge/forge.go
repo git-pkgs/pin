@@ -24,6 +24,10 @@ type Options struct {
 	// API and CDN base URLs, overridable for tests and self-hosted forges.
 	GitHubAPI   string
 	JSDelivrCDN string
+
+	// Verifier, when non-nil, validates each attestation bundle the
+	// forge path records. Nil = record-only (default).
+	Verifier source.ProvenanceVerifier
 }
 
 type Source struct {
