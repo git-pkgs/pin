@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/vers"
 )
 
@@ -54,7 +53,15 @@ func (r *OutdatedReport) Severity() string {
 	}
 }
 
+// Outdated is a one-shot shim around Client.Outdated.
 func Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, error) {
+	return New(ClientOptions{RegistryURL: opts.RegistryURL}).Outdated(ctx, opts)
+}
+
+// Outdated reports each lockfile entry's status against the registry's
+// current state: behind, deprecated, yanked, or carrying a provenance
+// downgrade/upgrade signal.
+func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, error) {
 	if opts.Lock == "" {
 		opts.Lock = DefaultLock
 	}
@@ -66,7 +73,7 @@ func Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, erro
 		return nil, fmt.Errorf("no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
 	}
 
-	src := npm.New(npm.Options{RegistryURL: opts.RegistryURL})
+	src := c.NPM
 
 	seen := map[string]bool{}
 	var reports []OutdatedReport

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/git-pkgs/pin/manifest"
-	"github.com/git-pkgs/pin/source/npm"
 )
 
 type AddOptions struct {
@@ -27,7 +26,14 @@ type AddResult struct {
 	SyncResult *SyncResult
 }
 
+// Add is a one-shot shim around Client.Add.
 func Add(ctx context.Context, spec string, files []string, opts AddOptions) (*AddResult, error) {
+	return New(ClientOptions{RegistryURL: opts.RegistryURL}).Add(ctx, spec, files, opts)
+}
+
+// Add resolves a package's latest-satisfying version, inserts it into
+// the manifest at its alphabetic position, and runs Sync.
+func (c *Client) Add(ctx context.Context, spec string, files []string, opts AddOptions) (*AddResult, error) {
 	if opts.Manifest == "" {
 		opts.Manifest = DefaultManifest
 	}
@@ -40,7 +46,7 @@ func Add(ctx context.Context, spec string, files []string, opts AddOptions) (*Ad
 		return nil, fmt.Errorf("add: package name is required")
 	}
 
-	src := npm.New(npm.Options{RegistryURL: opts.RegistryURL})
+	src := c.NPM
 
 	resolved, err := src.ResolveVersion(ctx, name, defaultIfEmpty(constraint, "latest"), 0)
 	if err != nil {
@@ -75,11 +81,10 @@ func Add(ctx context.Context, spec string, files []string, opts AddOptions) (*Ad
 		return nil, err
 	}
 
-	syncRes, err := Sync(ctx, SyncOptions{
-		Dir:         opts.Dir,
-		Manifest:    opts.Manifest,
-		Lock:        opts.Lock,
-		RegistryURL: opts.RegistryURL,
+	syncRes, err := c.Sync(ctx, SyncOptions{
+		Dir:      opts.Dir,
+		Manifest: opts.Manifest,
+		Lock:     opts.Lock,
 	})
 	if err != nil {
 		return nil, err

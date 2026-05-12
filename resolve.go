@@ -10,9 +10,7 @@ import (
 	"github.com/git-pkgs/pin/manifest"
 	"github.com/git-pkgs/pin/sniff"
 	"github.com/git-pkgs/pin/source"
-	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
-	"github.com/git-pkgs/pin/source/rawurl"
 )
 
 // fileContent is the resolver-to-writer handoff: where the bytes should
@@ -24,22 +22,27 @@ type fileContent struct {
 	content []byte
 }
 
-func resolveEntry(ctx context.Context, srcs sources, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
+// resolveEntry dispatches a manifest entry to the appropriate resolver
+// based on its source kind. The npm and forge paths use the typed
+// accessors (c.NPM, c.Forge) because they need source-specific APIs
+// beyond the Resolver interface; consumer-registered resolvers for
+// novel purl types are reached through c.resolvers via fallthrough.
+func (c *Client) resolveEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	src := e.Source()
 	switch src.Kind {
 	case manifest.SourceNPM:
-		return resolveNPMEntry(ctx, srcs.npm, m, e, lockedVersion)
+		return c.resolveNPMEntry(ctx, m, e, lockedVersion)
 	case manifest.SourceForge:
-		return resolveForgeEntry(ctx, srcs.forge, m, e, src)
+		return c.resolveForgeEntry(ctx, m, e, src)
 	case manifest.SourceURL:
-		return resolveURLEntry(ctx, srcs.rawurl, m, e)
+		return c.resolveURLEntry(ctx, m, e)
 	default:
 		return nil, nil, fmt.Errorf("%s: source kind %q not supported in this build", e.Name, src.Kind)
 	}
 }
 
-func resolveURLEntry(ctx context.Context, src *rawurl.Source, m *manifest.Manifest, e *manifest.Entry) ([]lock.Asset, []fileContent, error) {
-	resolved, err := src.Resolve(ctx, e.PURL(e.Version), nil)
+func (c *Client) resolveURLEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry) ([]lock.Asset, []fileContent, error) {
+	resolved, err := c.URL.Resolve(ctx, e.PURL(e.Version), nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,17 +76,17 @@ func resolveURLEntry(ctx context.Context, src *rawurl.Source, m *manifest.Manife
 	return assets, files, nil
 }
 
-func resolveNPMEntry(ctx context.Context, src *npm.Source, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
+func (c *Client) resolveNPMEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	version := lockedVersion
 	if !npm.IsSticky(lockedVersion, e.Version) {
-		v, err := src.ResolveVersion(ctx, e.Name, e.Version, m.EffectiveMinReleaseAge(e))
+		v, err := c.NPM.ResolveVersion(ctx, e.Name, e.Version, m.EffectiveMinReleaseAge(e))
 		if err != nil {
 			return nil, nil, err
 		}
 		version = v
 	}
 
-	resolved, err := src.Resolve(ctx, e.PURL(version), e.Files)
+	resolved, err := c.NPM.Resolve(ctx, e.PURL(version), e.Files)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -136,8 +139,8 @@ func toLockAttestation(a *source.Attestation) *lock.Attestation {
 	}
 }
 
-func resolveForgeEntry(ctx context.Context, src *forge.Source, m *manifest.Manifest, e *manifest.Entry, _ manifest.Source) ([]lock.Asset, []fileContent, error) {
-	resolved, err := src.Resolve(ctx, e.PURL(e.Version), e.Files)
+func (c *Client) resolveForgeEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry, _ manifest.Source) ([]lock.Asset, []fileContent, error) {
+	resolved, err := c.Forge.Resolve(ctx, e.PURL(e.Version), e.Files)
 	if err != nil {
 		return nil, nil, err
 	}

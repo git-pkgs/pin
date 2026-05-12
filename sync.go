@@ -17,10 +17,6 @@ import (
 	"github.com/git-pkgs/pin/manifest"
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
-	"github.com/git-pkgs/pin/source/rawurl"
-	"github.com/git-pkgs/pin/source/sigstoreverifier"
-	"github.com/sigstore/sigstore-go/pkg/root"
-	"github.com/sigstore/sigstore-go/pkg/tuf"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -106,7 +102,25 @@ type SyncResult struct {
 	Removed []string
 }
 
+// Sync is a one-shot shim around Client.Sync that constructs a Client
+// from the client-config fields embedded in SyncOptions (RegistryURL,
+// Forge, SignatureMode, VerifyProvenance). Library consumers that
+// reuse a Client across calls should use New + Client.Sync directly.
 func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
+	c, err := clientFromSyncOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	return c.Sync(ctx, opts)
+}
+
+// Sync resolves the manifest, fetches assets, and writes the lockfile.
+// Per-operation behaviour (DryRun, Frozen, Update, NoFetch, ...) lives
+// in opts; infrastructure config (RegistryURL, SignatureMode, ...)
+// comes from the Client created via New. The client-config fields on
+// SyncOptions are ignored — they exist for the package-level Sync
+// shim only.
+func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	if opts.Manifest == "" {
 		opts.Manifest = DefaultManifest
 	}
@@ -127,12 +141,7 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	prevVersions := lockedVersionsByName(prev)
 
 	if opts.NoFetch {
-		return syncNoFetch(opts, m, prev, prevVersions)
-	}
-
-	srcs, err := buildSources(opts)
-	if err != nil {
-		return nil, err
+		return c.syncNoFetch(opts, m, prev, prevVersions)
 	}
 
 	if opts.Frozen {
@@ -163,7 +172,7 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 			if opts.forceResolve(entry.Name) {
 				locked = ""
 			}
-			assets, files, rerr := resolveEntry(gctx, srcs, m, &entry, locked)
+			assets, files, rerr := c.resolveEntry(gctx, m, &entry, locked)
 			if rerr != nil {
 				return rerr
 			}
@@ -209,14 +218,14 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 // syncNoFetch implements --no-fetch: verify manifest and lockfile agree
 // (frozen-style), and re-hash every file under m.Out against the
 // lockfile's recorded integrity. No network, no writes.
-func syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) (*SyncResult, error) {
+func (c *Client) syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) (*SyncResult, error) {
 	if prev == nil {
 		return nil, fmt.Errorf("--no-fetch: no lockfile at %s; run sync first", filepath.Join(opts.Dir, opts.Lock))
 	}
 	if err := checkFrozen(m, prev, prevVersions); err != nil {
 		return nil, fmt.Errorf("--no-fetch: %w", err)
 	}
-	vr, err := Verify(VerifyOptions{Dir: opts.Dir, Lock: opts.Lock})
+	vr, err := c.Verify(VerifyOptions{Dir: opts.Dir, Lock: opts.Lock})
 	if err != nil {
 		return nil, fmt.Errorf("--no-fetch: %w", err)
 	}
@@ -239,61 +248,6 @@ func safeOut(dir, outDir, out string) (string, error) {
 		return "", fmt.Errorf("refusing to write outside out dir: out=%q resolves to %q", out, dst)
 	}
 	return dst, nil
-}
-
-type sources struct {
-	npm    *npm.Source
-	forge  *forge.Source
-	rawurl *rawurl.Source
-}
-
-func buildSources(opts SyncOptions) (sources, error) {
-	npmOpts := npm.Options{
-		RegistryURL:   opts.RegistryURL,
-		SignatureMode: opts.SignatureMode,
-	}
-	forgeOpts := opts.Forge
-	if opts.VerifyProvenance {
-		tr, err := loadTrustedRoot()
-		if err != nil {
-			return sources{}, fmt.Errorf("--verify-provenance: load Sigstore trust root: %w", err)
-		}
-		v := sigstoreverifier.New(tr)
-		npmOpts.Verifier = v
-		forgeOpts.Verifier = v
-	}
-	return sources{
-		npm:    npm.New(npmOpts),
-		forge:  forge.New(forgeOpts),
-		rawurl: rawurl.New(rawurl.Options{}),
-	}, nil
-}
-
-// loadTrustedRoot returns the Sigstore TUF trust root, using a pin-local
-// cache at $XDG_CACHE_HOME/pin/sigstore-tuf/ (os.UserCacheDir() on
-// platforms without XDG). ForceCache means a second --verify-provenance
-// sync within the metadata's validity window reuses the cached root
-// without a network round-trip.
-func loadTrustedRoot() (*root.TrustedRoot, error) {
-	cachePath, err := pinTUFCachePath()
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(cachePath, dirPerm); err != nil {
-		return nil, fmt.Errorf("create TUF cache dir %s: %w", cachePath, err)
-	}
-	tufOpts := tuf.DefaultOptions()
-	tufOpts.CachePath = cachePath
-	tufOpts.ForceCache = true
-	return root.FetchTrustedRootWithOptions(tufOpts)
-}
-
-func pinTUFCachePath() (string, error) {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "pin", "sigstore-tuf"), nil
 }
 
 func writeFiles(dir, outDir string, files []fileContent) ([]string, error) {

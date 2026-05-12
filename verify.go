@@ -42,7 +42,17 @@ func (r *VerifyResult) Failed() bool {
 	return len(r.Missing) > 0 || len(r.Drifted) > 0
 }
 
+// Verify is a one-shot shim around Client.Verify.
 func Verify(opts VerifyOptions) (*VerifyResult, error) {
+	c := New(ClientOptions{RegistryURL: opts.RegistryURL, SignatureMode: npm.SignatureModeOff})
+	return c.Verify(opts)
+}
+
+// Verify re-hashes every file under the lockfile's OutDir and compares
+// against the recorded integrity. With opts.Strict, npm-source entries
+// additionally re-derive their per-file integrity by re-fetching the
+// registry tarball.
+func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 	if opts.Lock == "" {
 		opts.Lock = DefaultLock
 	}
@@ -83,7 +93,7 @@ func Verify(opts VerifyOptions) (*VerifyResult, error) {
 	res.Extra = extra
 
 	if opts.Strict {
-		drifts, err := verifyStrictNPM(l, opts.RegistryURL)
+		drifts, err := c.verifyStrictNPM(l)
 		if err != nil {
 			return nil, err
 		}
@@ -105,8 +115,8 @@ func Verify(opts VerifyOptions) (*VerifyResult, error) {
 // forge and url sources are skipped: their per-file SHA-384 IS the
 // anchor (no separate tarball to re-derive from), so the standard
 // on-disk verify already provides equivalent assurance.
-func verifyStrictNPM(l *lock.Lock, registryURL string) ([]Drift, error) {
-	src := npm.New(npm.Options{RegistryURL: registryURL, SignatureMode: npm.SignatureModeOff})
+func (c *Client) verifyStrictNPM(l *lock.Lock) ([]Drift, error) {
+	src := c.NPM
 
 	byPkg := map[string][]lock.Asset{}
 	var keys []string

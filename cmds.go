@@ -30,7 +30,18 @@ func Init(dir, manifestPath string) error {
 	return os.WriteFile(p, []byte(initTemplate), filePerm)
 }
 
+// Remove is a one-shot shim around Client.Remove.
 func Remove(ctx context.Context, names []string, opts SyncOptions) (*SyncResult, error) {
+	c, err := clientFromSyncOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	return c.Remove(ctx, names, opts)
+}
+
+// Remove deletes the named entries from the manifest and runs Sync to
+// clean up the resulting lockfile and on-disk files.
+func (c *Client) Remove(ctx context.Context, names []string, opts SyncOptions) (*SyncResult, error) {
 	if opts.Manifest == "" {
 		opts.Manifest = DefaultManifest
 	}
@@ -53,7 +64,7 @@ func Remove(ctx context.Context, names []string, opts SyncOptions) (*SyncResult,
 	if err := os.WriteFile(manifestPath, current, filePerm); err != nil {
 		return nil, err
 	}
-	return Sync(ctx, opts)
+	return c.Sync(ctx, opts)
 }
 
 type ListEntry struct {
