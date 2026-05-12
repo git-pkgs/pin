@@ -253,6 +253,83 @@ func mustEncodeLock(t *testing.T, l *lock.Lock) []byte {
 	return b
 }
 
+// TestSyncConcurrencyDeterministic asserts the lockfile bytes are
+// independent of the resolve completion order: the same manifest with
+// --concurrency=1 and --concurrency=8 produces the same lockfile.
+// Combined with `go test -race`, this also catches data races in the
+// per-entry resolve path.
+func TestSyncConcurrencyDeterministic(t *testing.T) {
+	pkgs := []string{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"}
+
+	mux := http.NewServeMux()
+	tarballs := map[string][]byte{}
+	sharedURL := ""
+	for _, name := range pkgs {
+		pj, _ := json.Marshal(map[string]any{"name": name, "version": "1.0.0", "main": "index.js"})
+		tb := makeTarball(map[string]string{
+			"package.json": string(pj),
+			"index.js":     "module.exports='" + name + "'",
+		})
+		tarballs["/"+name+"/-/"+name+"-1.0.0.tgz"] = tb
+		h := sha512.Sum512(tb)
+		integrity := "sha512-" + base64.StdEncoding.EncodeToString(h[:])
+		n := name
+		mux.HandleFunc("/"+n+"/1.0.0", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name":    n,
+				"version": "1.0.0",
+				"dist":    map[string]any{"tarball": sharedURL + "/" + n + "/-/" + n + "-1.0.0.tgz", "integrity": integrity},
+			})
+		})
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if tb, ok := tarballs[r.URL.Path]; ok {
+			_, _ = w.Write(tb)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	sharedSrv := httptest.NewServer(mux)
+	sharedURL = sharedSrv.URL
+	t.Cleanup(sharedSrv.Close)
+
+	build := func(concurrency int) []byte {
+		dir := t.TempDir()
+		var mf strings.Builder
+		mf.WriteString("out: \"v\"\nassets:\n")
+		for _, name := range pkgs {
+			mf.WriteString("  - name: \"" + name + "\"\n    version: \"1.0.0\"\n    files: [\"index.js\"]\n")
+		}
+		writeManifest(t, dir, mf.String())
+		if _, err := Sync(context.Background(), SyncOptions{
+			Dir:         dir,
+			RegistryURL: sharedURL,
+			Concurrency: concurrency,
+		}); err != nil {
+			t.Fatalf("Sync concurrency=%d: %v", concurrency, err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, DefaultLock))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+
+	serial := build(1)
+	parallel := build(8)
+	if !bytes.Equal(serial, parallel) {
+		t.Error("lockfile differs between --concurrency=1 and --concurrency=8 — resolves must be order-independent")
+	}
+
+	l, err := lock.Read(bytes.NewReader(parallel))
+	if err != nil {
+		t.Fatalf("lock.Read: %v", err)
+	}
+	if len(l.Assets) != len(pkgs) {
+		t.Errorf("got %d assets, want %d", len(l.Assets), len(pkgs))
+	}
+}
+
 func TestSyncDryRun(t *testing.T) {
 	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "x"})
 	dir := t.TempDir()

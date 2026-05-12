@@ -25,7 +25,10 @@ import (
 	"github.com/git-pkgs/pin/source/sigstoreverifier"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/tuf"
+	"golang.org/x/sync/errgroup"
 )
+
+const defaultConcurrency = 8
 
 const (
 	DefaultManifest = "pin.yaml"
@@ -79,6 +82,13 @@ type SyncOptions struct {
 	// when a signature is present and fails on a bad one; enforce
 	// additionally fails on missing signatures; off skips verification.
 	SignatureMode npm.SignatureMode
+
+	// Concurrency caps the number of entries Sync resolves in parallel.
+	// Zero means defaultConcurrency. The lockfile order is independent of
+	// completion order: assets are sorted by (name, asset.out) before the
+	// file is written, so determinism is preserved regardless of how
+	// resolves interleave.
+	Concurrency int
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
@@ -125,18 +135,41 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	next := &lock.Lock{OutDir: m.Out}
 	var written []string
 
-	for _, entry := range m.Assets {
-		locked := prevVersions[entry.Name]
-		if opts.forceResolve(entry.Name) {
-			locked = ""
-		}
-		assets, files, rerr := resolveEntry(ctx, srcs, m, &entry, locked)
-		if rerr != nil {
-			return nil, rerr
-		}
-		next.Assets = append(next.Assets, assets...)
+	concurrency := opts.Concurrency
+	if concurrency <= 0 {
+		concurrency = defaultConcurrency
+	}
+
+	type entryResult struct {
+		assets []lock.Asset
+		files  []fileContent
+	}
+	results := make([]entryResult, len(m.Assets))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+	for i := range m.Assets {
+		g.Go(func() error {
+			entry := m.Assets[i]
+			locked := prevVersions[entry.Name]
+			if opts.forceResolve(entry.Name) {
+				locked = ""
+			}
+			assets, files, rerr := resolveEntry(gctx, srcs, m, &entry, locked)
+			if rerr != nil {
+				return rerr
+			}
+			results[i] = entryResult{assets: assets, files: files}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	for _, r := range results {
+		next.Assets = append(next.Assets, r.assets...)
 		if !opts.DryRun {
-			w, werr := writeFiles(opts.Dir, m.Out, files)
+			w, werr := writeFiles(opts.Dir, m.Out, r.files)
 			if werr != nil {
 				return nil, werr
 			}
