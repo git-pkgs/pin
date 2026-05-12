@@ -13,10 +13,10 @@ func boolPtr(b bool) *bool { return &b }
 func TestEnforceTrust_PublisherMismatch(t *testing.T) {
 	m := &manifest.Manifest{Assets: []manifest.Entry{{Name: "evil", Version: "1.0.0"}}}
 	l := &lock.Lock{Assets: []lock.Asset{{
-		Name:             "evil",
-		Version:          "1.0.0",
-		PURL:             "pkg:npm/evil@1.0.0",
-		SourceRepository: "https://github.com/legitimate/repo",
+		Name:       "evil",
+		Version:    "1.0.0",
+		PURL:       "pkg:npm/evil@1.0.0",
+		Repository: "https://github.com/legitimate/repo",
 		Attestation: &lock.Attestation{
 			SourceRepository: "https://github.com/attacker/repo",
 			BuilderID:        "https://github.com/attacker/repo/.github/workflows/release.yml@refs/tags/v1",
@@ -37,10 +37,10 @@ func TestEnforceTrust_TrustedWorkflowAllows(t *testing.T) {
 		Assets: []manifest.Entry{{Name: "monorepo-pkg", Version: "1.0.0"}},
 	}
 	l := &lock.Lock{Assets: []lock.Asset{{
-		Name:             "monorepo-pkg",
-		Version:          "1.0.0",
-		PURL:             "pkg:npm/monorepo-pkg@1.0.0",
-		SourceRepository: "https://github.com/owner/declared-repo",
+		Name:       "monorepo-pkg",
+		Version:    "1.0.0",
+		PURL:       "pkg:npm/monorepo-pkg@1.0.0",
+		Repository: "https://github.com/owner/declared-repo",
 		Attestation: &lock.Attestation{
 			SourceRepository: "https://github.com/builder-org/builder",
 			BuilderID:        "https://github.com/builder-org/builder/.github/workflows/release.yml@refs/tags/v1",

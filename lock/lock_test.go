@@ -30,7 +30,7 @@ func sample() *Lock {
 				Size:             51007,
 				PackageIntegrity: sri512,
 				License:          "0BSD",
-				SourceRepository: "https://github.com/bigskysoftware/htmx",
+				Repository:       "https://github.com/bigskysoftware/htmx",
 			},
 			{
 				Name:             "basecoat-css",

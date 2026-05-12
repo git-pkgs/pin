@@ -117,7 +117,7 @@ func (c *Client) resolveNPMEntry(ctx context.Context, m *manifest.Manifest, e *m
 			Size:             f.Size,
 			PackageIntegrity: resolved.PackageIntegrity,
 			License:          resolved.License,
-			SourceRepository: resolved.SourceRepository,
+			Repository:       resolved.SourceRepository,
 			Attestation:      att,
 		})
 		files = append(files, fileContent{out: out, content: f.Content})
@@ -170,7 +170,7 @@ func (c *Client) resolveForgeEntry(ctx context.Context, m *manifest.Manifest, e 
 			Integrity:        f.Integrity,
 			Size:             f.Size,
 			PackageIntegrity: resolved.PackageIntegrity,
-			SourceRepository: resolved.SourceRepository,
+			Repository:       resolved.SourceRepository,
 			Attestation:      att,
 		})
 		files = append(files, fileContent{out: out, content: f.Content})

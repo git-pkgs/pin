@@ -66,7 +66,7 @@ func enforceTrust(m *manifest.Manifest, l *lock.Lock, opts SyncOptions) error {
 // source repository doesn't match the package's declared repository,
 // or empty when it does or the trusted_workflows allowlist permits it.
 func publisherMismatch(a *lock.Asset, trustedWorkflows []string) string {
-	want := normaliseRepoURL(a.SourceRepository)
+	want := normaliseRepoURL(a.Repository)
 	got := normaliseRepoURL(a.Attestation.SourceRepository)
 	if want == "" || got == "" || want == got {
 		return ""

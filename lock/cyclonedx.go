@@ -150,8 +150,8 @@ func packageComponent(purl string, assets []Asset) cdxComponent {
 	if first.License != "" {
 		c.Licenses = []cdxLicense{{License: cdxLicenseID{ID: first.License}}}
 	}
-	if first.SourceRepository != "" {
-		c.ExternalReferences = []cdxExtRef{{Type: "vcs", URL: first.SourceRepository}}
+	if first.Repository != "" {
+		c.ExternalReferences = []cdxExtRef{{Type: "vcs", URL: first.Repository}}
 	}
 	if first.Attestation != nil {
 		c.Properties = append(c.Properties, attestationProperties(first.Attestation)...)
@@ -261,7 +261,7 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 				PURL:             pkg.PURL,
 				PackageIntegrity: pkgIntegrity,
 				License:          license,
-				SourceRepository: srcRepo,
+				Repository:       srcRepo,
 				Attestation:      attestation,
 				Path:             file.Name,
 				Out:              findProp(file.Properties, propOut),

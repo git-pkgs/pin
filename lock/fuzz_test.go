@@ -35,7 +35,7 @@ func FuzzRead(f *testing.F) {
 			Size:             42,
 			PackageIntegrity: "sha512-zzz",
 			License:          "MIT",
-			SourceRepository: "https://github.com/example/demo",
+			Repository:       "https://github.com/example/demo",
 		}},
 	}
 	var buf bytes.Buffer

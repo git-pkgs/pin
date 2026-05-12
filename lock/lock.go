@@ -48,8 +48,14 @@ type Asset struct {
 	Size             int64
 	PackageIntegrity string
 	License          string
-	SourceRepository string
-	Attestation      *Attestation
+	// Repository is the package's declared repository URL (npm
+	// package.json repository.url, GitHub forge derives it from the
+	// owner/repo pair). Used by the publisher-matches-repository
+	// check to compare against an Attestation.SourceRepository (the
+	// repo the attestation says the build came from); the two are
+	// different things and should not be conflated.
+	Repository  string
+	Attestation *Attestation
 }
 
 // Attestation records the SLSA Provenance v1 fields for a package version,
