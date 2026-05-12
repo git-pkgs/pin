@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/git-pkgs/pin/lock"
+	"github.com/git-pkgs/pin/source/forge"
 )
 
 func makeTarball(files map[string]string) []byte {
@@ -384,6 +385,76 @@ assets:
 `)
 	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, NoFetch: true}); err == nil {
 		t.Error("--no-fetch should fail when manifest drifts ahead of the lockfile")
+	}
+}
+
+// fakeGitHub mirrors source/forge's test helper: stub /repos commits
+// lookup + jsdelivr-style /gh/{owner}/{repo}@{sha}/ file fetches. The
+// pin root sync test needs both endpoints on the same httptest server
+// so we can wire them through SyncOptions.Forge in one go.
+func fakeGitHub(t *testing.T, owner, repo, tag, sha string, files map[string]string) (api, cdn string) {
+	t.Helper()
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/repos/"+owner+"/"+repo+"/commits/"+tag, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": sha})
+	})
+	apiSrv := httptest.NewServer(apiMux)
+	t.Cleanup(apiSrv.Close)
+
+	cdnMux := http.NewServeMux()
+	for path, content := range files {
+		p := "/gh/" + owner + "/" + repo + "@" + sha + "/" + path
+		body := content
+		cdnMux.HandleFunc(p, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(body))
+		})
+	}
+	cdnSrv := httptest.NewServer(cdnMux)
+	t.Cleanup(cdnSrv.Close)
+
+	return apiSrv.URL, cdnSrv.URL
+}
+
+func TestSyncForgeEntry(t *testing.T) {
+	api, cdn := fakeGitHub(t, "highlightjs", "cdn-release", "11.11.1",
+		"abc123def4567890abc123def4567890abc12345",
+		map[string]string{
+			"build/highlight.min.js": "var hljs={}",
+		})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "highlight.js"
+    source: "github:highlightjs/cdn-release"
+    version: "11.11.1"
+    files: ["build/highlight.min.js"]
+`)
+	res, err := Sync(context.Background(), SyncOptions{
+		Dir: dir,
+		Forge: forge.Options{
+			GitHubAPI:   api,
+			JSDelivrCDN: cdn,
+		},
+	})
+	if err != nil {
+		t.Fatalf("forge Sync: %v", err)
+	}
+	if len(res.Lock.Assets) != 1 {
+		t.Fatalf("Lock.Assets = %d, want 1", len(res.Lock.Assets))
+	}
+	a := res.Lock.Assets[0]
+	if !strings.HasPrefix(a.PURL, "pkg:github/highlightjs/cdn-release@11.11.1") {
+		t.Errorf("PURL = %q, want pkg:github/... prefix", a.PURL)
+	}
+	if a.PackageIntegrity != "abc123def4567890abc123def4567890abc12345" {
+		t.Errorf("PackageIntegrity = %q, want the SHA", a.PackageIntegrity)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "v/highlightjs__cdn-release/highlight.min.js"))
+	if err != nil {
+		t.Fatalf("vendored file missing: %v", err)
+	}
+	if string(got) != "var hljs={}" {
+		t.Errorf("file bytes = %q", got)
 	}
 }
 

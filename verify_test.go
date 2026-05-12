@@ -107,6 +107,42 @@ func TestVerifyNoLockfile(t *testing.T) {
 	}
 }
 
+// TestVerifyStrict exercises the --strict re-derive path: the inner
+// verifyStrictNPM that re-fetches each npm package's tarball and
+// recomputes per-file SHA-384 against the lockfile-recorded integrity.
+func TestVerifyStrict(t *testing.T) {
+	dir, srvURL := setupSynced(t)
+	res, err := Verify(VerifyOptions{Dir: dir, Strict: true, RegistryURL: srvURL})
+	if err != nil {
+		t.Fatalf("Verify --strict: %v", err)
+	}
+	if res.Failed() {
+		t.Errorf("clean --strict verify failed: %+v", res)
+	}
+}
+
+// TestVerifyStrict_TarballMismatch covers the case where the
+// registry-side bytes drift from what the lockfile recorded. We swap
+// in a fakeNPM that returns a different tarball than the one we
+// originally synced from; --strict catches it.
+func TestVerifyStrict_TarballMismatch(t *testing.T) {
+	dir, _ := setupSynced(t)
+	// Different files = different per-file SHA-384, but the lockfile
+	// still has the original integrity. --strict re-derives from the
+	// new tarball and sees the mismatch.
+	srvNew := fakeNPM(t, "demo", "1.0.0", map[string]string{
+		"dist/a.js":  "ALPHA-MODIFIED",
+		"dist/b.css": "BETA-MODIFIED",
+	})
+	res, err := Verify(VerifyOptions{Dir: dir, Strict: true, RegistryURL: srvNew.URL})
+	if err != nil {
+		t.Fatalf("Verify --strict: %v", err)
+	}
+	if !res.Failed() {
+		t.Error("--strict against a drifted tarball should fail")
+	}
+}
+
 func TestVerifySummary(t *testing.T) {
 	r := &VerifyResult{
 		OK:      []string{"a", "b"},

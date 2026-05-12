@@ -143,6 +143,49 @@ func TestResolveVersionCooldown(t *testing.T) {
 	})
 }
 
+func TestStatus_Happy(t *testing.T) {
+	srv := fakePackageDoc(t, "demo", map[string]string{"latest": "1.2.0"}, []string{"1.0.0", "1.1.0", "1.2.0"})
+	src := New(Options{RegistryURL: srv.URL})
+	st, err := src.Status(context.Background(), "demo", "1.0.0")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Latest != "1.2.0" {
+		t.Errorf("Latest = %q, want 1.2.0", st.Latest)
+	}
+	if st.Yanked {
+		t.Error("1.0.0 is in versions; should not be yanked")
+	}
+}
+
+func TestStatus_Yanked(t *testing.T) {
+	srv := fakePackageDoc(t, "demo", map[string]string{"latest": "2.0.0"}, []string{"2.0.0"})
+	src := New(Options{RegistryURL: srv.URL})
+	st, err := src.Status(context.Background(), "demo", "1.0.0")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Yanked {
+		t.Error("1.0.0 missing from versions; should be yanked")
+	}
+}
+
+func TestVersionHasProvenance(t *testing.T) {
+	cases := map[string]bool{
+		``:                             false,
+		`{}`:                           false,
+		`{"dist":{}}`:                  false,
+		`{"dist":{"attestations":[]}}`: false,
+		`{"dist":{"attestations":[{"provenance":1}]}}`: true,
+	}
+	for in, want := range cases {
+		got := versionHasProvenance(json.RawMessage(in))
+		if got != want {
+			t.Errorf("versionHasProvenance(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
 func TestIsSticky(t *testing.T) {
 	cases := []struct {
 		locked, constraint string

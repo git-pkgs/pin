@@ -26,31 +26,51 @@ func TestInit(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/a.js": "a", "dist/b.js": "b"})
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/a.js": "a"})
 	dir := t.TempDir()
 	writeManifest(t, dir, `out: "v"
 assets:
   - name: "demo"
     version: "1.0.0"
     files: ["dist/a.js"]
-  - name: "other"
-    version: "1.0.0"
-    files: ["dist/b.js"]
 `)
 	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
-		t.Skip("setup failed (other not in fake registry):", err)
-	}
-
-	res, err := Remove(context.Background(), []string{"other"}, SyncOptions{Dir: dir, RegistryURL: srv.URL})
-	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Removed) == 0 {
-		t.Error("expected removed entries after rm")
+
+	res, err := Remove(context.Background(), []string{"demo"}, SyncOptions{Dir: dir, RegistryURL: srv.URL})
+	if err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(res.Removed) != 1 {
+		t.Errorf("Removed = %v, want one entry", res.Removed)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, DefaultManifest))
-	if strings.Contains(string(got), "other") {
-		t.Errorf("manifest still contains 'other':\n%s", got)
+	if strings.Contains(string(got), "name: \"demo\"") {
+		t.Errorf("manifest still contains demo:\n%s", got)
+	}
+}
+
+func TestRemove_DryRun(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/a.js": "a"})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/a.js"]
+`)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	originalManifest, _ := os.ReadFile(filepath.Join(dir, DefaultManifest))
+
+	if _, err := Remove(context.Background(), []string{"demo"}, SyncOptions{Dir: dir, DryRun: true}); err != nil {
+		t.Fatalf("Remove --dry-run: %v", err)
+	}
+	after, _ := os.ReadFile(filepath.Join(dir, DefaultManifest))
+	if string(originalManifest) != string(after) {
+		t.Error("--dry-run modified the manifest")
 	}
 }
 
