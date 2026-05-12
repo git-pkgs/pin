@@ -1,8 +1,7 @@
 // Package rawurl implements source.Resolver for url: manifest sources.
-// The integrity model is TOFU: the first fetch records a SHA-384 SRI of
-// the bytes; subsequent fetches verify against the recorded hash. No
-// upstream anchor is possible because the URL points at arbitrary bytes
-// that the publisher controls without any registry intermediation.
+// Integrity is TOFU: the first fetch records a SHA-384 SRI; later
+// fetches verify against it. No upstream anchor exists — the publisher
+// controls the bytes without registry intermediation.
 package rawurl
 
 import (
@@ -15,7 +14,6 @@ import (
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
 
-	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
 )
 
@@ -30,8 +28,7 @@ type Source struct {
 func New(opts Options) *Source {
 	c := opts.HTTPClient
 	if c == nil {
-		c = client.NewClient()
-		c.HTTPClient = safehttp.New(c.HTTPClient, safehttp.Options{})
+		c = client.NewClient(client.WithSafeHTTP())
 	}
 	return &Source{http: c}
 }
@@ -39,10 +36,8 @@ func New(opts Options) *Source {
 type Resolved = source.Resolved
 type ResolvedFile = source.ResolvedFile
 
-// Resolve fetches the URL recorded in the purl's download_url qualifier.
-// The purl carries name + version as user-supplied identifiers; the URL
-// is what gets fetched. `files` is ignored — a url source is exactly one
-// file by construction.
+// Resolve fetches the purl's download_url qualifier. files is
+// ignored — a url source is exactly one file by construction.
 func (s *Source) Resolve(ctx context.Context, p *purl.PURL, _ []string) (*Resolved, error) {
 	url := p.Qualifier("download_url")
 	if url == "" {

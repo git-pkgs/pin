@@ -8,29 +8,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/spdx"
 	"github.com/git-pkgs/vers"
 )
 
-// unmaintainedThreshold is the LastPublish age above which a package
-// is flagged as unmaintained in `pin outdated`. 365 days is a cold-
-// enough signal that an actively-maintained library wouldn't trip it
-// (most projects ship at least one patch a year), without flagging
-// stable-on-purpose libraries (which tend to ship in the 2-3 year
-// window). The threshold is informational, not a sync-blocker.
+// unmaintainedThresholdDays is informational, not a sync-blocker.
+// 365 days is cold enough that actively-maintained libraries don't
+// trip it while stable-on-purpose libraries (2-3 year cadence) do.
 const unmaintainedThresholdDays = 365
 
-// OutdatedOptions configures pin.Outdated / Client.Outdated.
 type OutdatedOptions struct {
 	Dir         string
 	Lock        string
 	RegistryURL string
 }
 
-// OutdatedReport is one row of pin.Outdated: the locked version
-// against the registry's current state, with the most-severe finding
-// surfaced via Severity (one of "ok" / "behind" / "deprecated" /
-// "provenance-downgrade" / "yanked").
+// OutdatedReport is one row of pin.Outdated. Severity reports the
+// most-severe finding: ok / behind / deprecated / provenance-downgrade
+// / yanked.
 type OutdatedReport struct {
 	Name                string
 	Locked              string
@@ -43,17 +39,15 @@ type OutdatedReport struct {
 	ProvenanceDowngrade bool // locked had provenance, latest doesn't
 	ProvenanceUpgrade   bool // locked didn't, latest does
 
-	// LicenseLocked / LicenseLatest are the SPDX-normalised license
-	// strings for the locked and latest versions. LicenseChange is
-	// true when both are non-empty and normalised-differ — the user
-	// should re-evaluate license compatibility before bumping.
+	// LicenseLocked / LicenseLatest are SPDX-normalised. LicenseChange
+	// is true when both are non-empty and differ; bumping should
+	// re-evaluate license compatibility.
 	LicenseLocked string
 	LicenseLatest string
 	LicenseChange bool
 
-	// Unmaintained is true when the package's last publish (any
-	// version) is older than unmaintainedThresholdDays. Informational;
-	// does not affect Severity or OutdatedExitCode.
+	// Unmaintained is informational; does not affect Severity or
+	// OutdatedExitCode.
 	Unmaintained bool
 }
 
@@ -80,14 +74,12 @@ func (r *OutdatedReport) Severity() string {
 	}
 }
 
-// Outdated is a one-shot shim around Client.Outdated.
 func Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, error) {
 	return New(ClientOptions{RegistryURL: opts.RegistryURL}).Outdated(ctx, opts)
 }
 
-// Outdated reports each lockfile entry's status against the registry's
-// current state: behind, deprecated, yanked, or carrying a provenance
-// downgrade/upgrade signal.
+// Outdated reports each lockfile entry's status against the
+// registry's current state.
 func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]OutdatedReport, error) {
 	if opts.Lock == "" {
 		opts.Lock = DefaultLock
@@ -118,7 +110,11 @@ func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]Outdated
 			continue
 		}
 
-		st, err := src.Status(ctx, a.Name, a.Version)
+		p, perr := purl.Parse(a.PURL)
+		if perr != nil {
+			return nil, fmt.Errorf("%s: parse purl %q: %w", a.Name, a.PURL, perr)
+		}
+		st, err := src.Status(ctx, p)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", a.Name, err)
 		}
@@ -145,11 +141,9 @@ func (c *Client) Outdated(ctx context.Context, opts OutdatedOptions) ([]Outdated
 	return reports, nil
 }
 
-// normaliseLicense runs the input through spdx's lax normaliser so two
-// equivalent expressions ("MIT License" vs "MIT") compare equal. On
-// any parser error the raw string is returned: the comparison falls
-// back to literal equality, which is still useful when both inputs
-// came from the same registry path.
+// normaliseLicense falls back to the raw string on parser error so
+// two registry-supplied expressions still compare literally when
+// SPDX normalisation can't help.
 func normaliseLicense(s string) string {
 	if s == "" {
 		return ""
@@ -176,10 +170,8 @@ const (
 	ExitYanked   = 9
 )
 
-// OutdatedExitCode collapses a slice of OutdatedReport into the CLI
-// exit code: ExitYanked (9) wins over ExitOutdated (7) wins over 0.
-// Exported so library consumers driving the CLI from Go can mirror
-// the exit-code semantics.
+// OutdatedExitCode collapses reports into the CLI exit code:
+// ExitYanked (9) > ExitOutdated (7) > 0.
 func OutdatedExitCode(reports []OutdatedReport) int {
 	code := 0
 	for _, r := range reports {

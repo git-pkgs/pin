@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/git-pkgs/pin/internal/safehttp"
+	"github.com/git-pkgs/registries/safehttp"
 )
 
 func TestMain(m *testing.M) {

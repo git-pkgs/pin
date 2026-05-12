@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/git-pkgs/cooldown"
 )
 
 func fakePackageDoc(t *testing.T, name string, distTags map[string]string, versions []string) *httptest.Server {
@@ -40,7 +42,7 @@ func fakePackageDocAt(t *testing.T, name string, distTags map[string]string, ver
 
 func TestResolveVersionExact(t *testing.T) {
 	src := New(Options{})
-	got, err := src.ResolveVersion(context.Background(), "x", "2.0.6", 0)
+	got, err := src.ResolveVersion(context.Background(), npmPURL("x", ""), "2.0.6", nil)
 	if err != nil || got != "2.0.6" {
 		t.Fatalf("got %q, %v", got, err)
 	}
@@ -53,7 +55,7 @@ func TestResolveVersionDistTag(t *testing.T) {
 	src := New(Options{RegistryURL: srv.URL})
 
 	for tag, want := range map[string]string{"latest": "3.1.0", "next": "4.0.0-beta.1"} {
-		got, err := src.ResolveVersion(context.Background(), "demo", tag, 0)
+		got, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), tag, nil)
 		if err != nil || got != want {
 			t.Errorf("ResolveVersion(%q) = %q, %v; want %q", tag, got, err, want)
 		}
@@ -76,7 +78,7 @@ func TestResolveVersionRange(t *testing.T) {
 		{">=1.0.0 <2.0.0", "1.9.0"},
 	}
 	for _, tc := range cases {
-		got, err := src.ResolveVersion(context.Background(), "demo", tc.constraint, 0)
+		got, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), tc.constraint, nil)
 		if err != nil || got != tc.want {
 			t.Errorf("ResolveVersion(%q) = %q, %v; want %q", tc.constraint, got, err, tc.want)
 		}
@@ -87,7 +89,7 @@ func TestResolveVersionNoMatch(t *testing.T) {
 	srv := fakePackageDoc(t, "demo", map[string]string{}, []string{"1.0.0"})
 	src := New(Options{RegistryURL: srv.URL})
 
-	if _, err := src.ResolveVersion(context.Background(), "demo", "^9.0", 0); err == nil {
+	if _, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "^9.0", nil); err == nil {
 		t.Fatal("expected error for unsatisfiable range")
 	}
 }
@@ -106,37 +108,49 @@ func TestResolveVersionCooldown(t *testing.T) {
 			"modified": recent,
 		})
 	src := New(Options{RegistryURL: srv.URL})
+	cool := &cooldown.Config{Default: "48h"}
 
 	t.Run("range falls back to older version", func(t *testing.T) {
-		got, err := src.ResolveVersion(context.Background(), "demo", "^1.0", 48*time.Hour)
+		got, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "^1.0", cool)
 		if err != nil || got != "1.5.0" {
 			t.Errorf("got %q, %v; want 1.5.0", got, err)
 		}
 	})
 
 	t.Run("range to fresh major fails", func(t *testing.T) {
-		_, err := src.ResolveVersion(context.Background(), "demo", "^2.0", 48*time.Hour)
+		_, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "^2.0", cool)
 		if err == nil || !strings.Contains(err.Error(), "cooldown") {
 			t.Errorf("expected cooldown error, got %v", err)
 		}
 	})
 
 	t.Run("dist-tag pointing at fresh version fails", func(t *testing.T) {
-		_, err := src.ResolveVersion(context.Background(), "demo", "latest", 48*time.Hour)
+		_, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "latest", cool)
 		if err == nil || !strings.Contains(err.Error(), "cooldown") {
 			t.Errorf("expected cooldown error, got %v", err)
 		}
 	})
 
 	t.Run("exact pin bypasses cooldown", func(t *testing.T) {
-		got, err := src.ResolveVersion(context.Background(), "demo", "2.0.0", 48*time.Hour)
+		got, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "2.0.0", cool)
 		if err != nil || got != "2.0.0" {
 			t.Errorf("got %q, %v; want 2.0.0", got, err)
 		}
 	})
 
-	t.Run("zero cooldown is opt-out", func(t *testing.T) {
-		got, err := src.ResolveVersion(context.Background(), "demo", "^2.0", 0)
+	t.Run("nil cooldown is opt-out", func(t *testing.T) {
+		got, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "^2.0", nil)
+		if err != nil || got != "2.0.0" {
+			t.Errorf("got %q, %v; want 2.0.0", got, err)
+		}
+	})
+
+	t.Run("per-package override opts a package out", func(t *testing.T) {
+		cfg := &cooldown.Config{
+			Default:  "48h",
+			Packages: map[string]string{"pkg:npm/demo": "0"},
+		}
+		got, err := src.ResolveVersion(context.Background(), npmPURL("demo", ""), "^2.0", cfg)
 		if err != nil || got != "2.0.0" {
 			t.Errorf("got %q, %v; want 2.0.0", got, err)
 		}
@@ -146,7 +160,7 @@ func TestResolveVersionCooldown(t *testing.T) {
 func TestStatus_Happy(t *testing.T) {
 	srv := fakePackageDoc(t, "demo", map[string]string{"latest": "1.2.0"}, []string{"1.0.0", "1.1.0", "1.2.0"})
 	src := New(Options{RegistryURL: srv.URL})
-	st, err := src.Status(context.Background(), "demo", "1.0.0")
+	st, err := src.Status(context.Background(), npmPURL("demo", "1.0.0"))
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -161,7 +175,7 @@ func TestStatus_Happy(t *testing.T) {
 func TestStatus_Yanked(t *testing.T) {
 	srv := fakePackageDoc(t, "demo", map[string]string{"latest": "2.0.0"}, []string{"2.0.0"})
 	src := New(Options{RegistryURL: srv.URL})
-	st, err := src.Status(context.Background(), "demo", "1.0.0")
+	st, err := src.Status(context.Background(), npmPURL("demo", "1.0.0"))
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}

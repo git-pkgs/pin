@@ -11,7 +11,6 @@ import (
 	"github.com/git-pkgs/pin/manifest"
 )
 
-// AddOptions configures pin.Add / Client.Add.
 type AddOptions struct {
 	Dir         string
 	Manifest    string
@@ -21,16 +20,13 @@ type AddOptions struct {
 	DryRun      bool
 }
 
-// AddResult is the result of pin.Add: the inserted manifest entry,
-// the registry-resolved version string, and the synchronous Sync run
-// the inserted entry triggered (nil under --dry-run).
+// AddResult has SyncResult == nil under --dry-run.
 type AddResult struct {
 	Entry      manifest.Entry
 	Resolved   string
 	SyncResult *SyncResult
 }
 
-// Add is a one-shot shim around Client.Add.
 func Add(ctx context.Context, spec string, files []string, opts AddOptions) (*AddResult, error) {
 	return New(ClientOptions{RegistryURL: opts.RegistryURL}).Add(ctx, spec, files, opts)
 }
@@ -52,7 +48,8 @@ func (c *Client) Add(ctx context.Context, spec string, files []string, opts AddO
 
 	src := c.NPM
 
-	resolved, err := src.ResolveVersion(ctx, name, defaultIfEmpty(constraint, "latest"), 0)
+	e := manifest.Entry{Name: name}
+	resolved, err := src.ResolveVersion(ctx, e.PURL(""), defaultIfEmpty(constraint, "latest"), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -7,67 +7,51 @@ import (
 	"path/filepath"
 
 	rclient "github.com/git-pkgs/registries/client"
+	"github.com/git-pkgs/sigstore"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/tuf"
 
-	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/pin/source/rawurl"
-	"github.com/git-pkgs/pin/source/sigstore"
 )
 
-// ClientOptions configures a Client. All fields are optional; zero
-// values give the same defaults the pin CLI uses.
+// ClientOptions configures a Client. Zero values give the CLI defaults.
 type ClientOptions struct {
-	// HTTPClient is shared across every resolver in the Client.
-	// Default: safehttp.New(nil, safehttp.Options{}) — SSRF-safe dial
-	// gate, redirect cap, scheme allowlist.
+	// HTTPClient overrides the default, which is the safehttp transport
+	// (SSRF-safe dial gate, redirect cap, scheme allowlist).
 	HTTPClient *http.Client
 
-	// RegistryURL overrides the default npm registry
-	// (https://registry.npmjs.org). Honoured by the built-in npm
-	// resolver only.
+	// RegistryURL overrides the default npm registry. Honoured by the
+	// built-in npm resolver only.
 	RegistryURL string
 
-	// Forge configures the forge resolver (GitHub today; the package
-	// is structured so GitLab/Gitea/Codeberg slot in by adding cases
-	// to its purl-type switch).
 	Forge forge.Options
 
 	// SignatureMode controls npm dist.signatures verification. Zero is
-	// SignatureModeWarn (verify when present, warn on absent, fail on
-	// bad).
+	// SignatureModeWarn.
 	SignatureMode npm.SignatureMode
 
-	// Verifier cryptographically validates each attestation bundle the
-	// built-in npm and forge resolvers record. Nil means record-only —
-	// attestations land in the lockfile but the bundle's certificate
-	// chain and inclusion proof are not checked. The pin CLI sets this
-	// to sigstoreverifier.New(<TUF root>) when --verify-provenance is
-	// passed; library consumers can supply any source.ProvenanceVerifier.
+	// Verifier validates each attestation bundle the built-in npm and
+	// forge resolvers record. Nil means record-only — attestations
+	// land in the lockfile but the certificate chain and inclusion
+	// proof are not checked. The pin CLI sets this to sigstore.New(<TUF
+	// root>) when --verify-provenance is passed.
 	Verifier source.ProvenanceVerifier
 }
 
-// Client holds the shared state used across pin operations: HTTP
-// client, source resolvers keyed by purl type, and typed accessors
-// for the built-in sources. A Client is safe for concurrent use
-// across operations.
-//
-// Construct via New. Add or override resolvers via RegisterResolver.
-// Use the operation methods (Sync, Verify, Outdated, ...) directly;
-// the package-level functions of the same name are thin shims that
-// construct a Client per call.
+// Client holds shared state across pin operations: HTTP client,
+// source resolvers keyed by purl type, and typed accessors for the
+// built-in sources. Safe for concurrent use across operations.
 type Client struct {
 	httpClient *http.Client
 
-	// NPM, Forge, and URL are typed accessors to the built-in resolvers.
-	// Operations that need source-specific APIs (npm.IsSticky for the
-	// sticky-version check, npm.Status for `pin outdated`, the npm
-	// tarball re-derive for `verify --strict`) use these. They stay
-	// pointing at the resolvers initially registered by New, even when
-	// a consumer overrides the same purl type via RegisterResolver.
+	// NPM, Forge, URL stay pointing at the resolvers registered by
+	// New even when a consumer overrides the same purl type via
+	// RegisterResolver. Operations that need source-specific APIs
+	// (npm.IsSticky, npm.Status, npm tarball re-derive for
+	// verify --strict) use these.
 	NPM   *npm.Source
 	Forge *forge.Source
 	URL   *rawurl.Source
@@ -75,18 +59,17 @@ type Client struct {
 	resolvers map[string]source.Resolver
 }
 
-// New returns a Client with the three built-in resolvers (npm, github,
-// generic) registered. Consumers can add or replace resolvers via
+// New returns a Client with the built-in npm, github, and generic
+// resolvers registered. Consumers can add or replace resolvers via
 // RegisterResolver before calling any operation method.
 func New(opts ClientOptions) *Client {
-	httpClient := opts.HTTPClient
-	if httpClient == nil {
-		httpClient = safehttp.New(nil, safehttp.Options{})
+	var clientOpts []rclient.Option
+	if opts.HTTPClient != nil {
+		clientOpts = append(clientOpts, rclient.WithHTTPClient(opts.HTTPClient))
+	} else {
+		clientOpts = append(clientOpts, rclient.WithSafeHTTP())
 	}
-
-	rc := rclient.NewClient()
-	rc.HTTPClient = httpClient
-	rc.UserAgent = userAgent()
+	rc := rclient.NewClient(clientOpts...).WithUserAgent(userAgent())
 
 	npmS := npm.New(npm.Options{
 		HTTPClient:    rc,
@@ -105,7 +88,7 @@ func New(opts ClientOptions) *Client {
 	rawurlS := rawurl.New(rawurl.Options{HTTPClient: rc})
 
 	return &Client{
-		httpClient: httpClient,
+		httpClient: rc.HTTPClient,
 		NPM:        npmS,
 		Forge:      forgeS,
 		URL:        rawurlS,
@@ -117,40 +100,30 @@ func New(opts ClientOptions) *Client {
 	}
 }
 
-// RegisterResolver attaches a resolver for the given purl type. Used
-// internally by New for the built-in sources; exported so consumers
-// can plug in additional source kinds (pkg:ipfs/..., pkg:internal/...)
-// without forking pin. Overwrites any previously-registered resolver
-// for the same type.
-//
-// Resolvers are read-only after registration; pin operations dispatch
-// on resolved purl type at sync time.
+// RegisterResolver attaches a resolver for the given purl type.
+// Overwrites any previously-registered resolver. Resolvers are
+// read-only after registration; operations dispatch on resolved purl
+// type at sync time.
 func (c *Client) RegisterResolver(purlType string, r source.Resolver) {
 	c.resolvers[purlType] = r
 }
 
 // Resolver returns the resolver registered for the given purl type,
-// or nil if none. Useful for consumers that want to delegate to a
-// built-in resolver from a custom one (e.g. an IPFS resolver that
-// falls back to npm for non-IPFS purls).
+// or nil. Useful for custom resolvers that delegate to a built-in for
+// non-matching purls.
 //
 //nolint:ireturn // the plug-in surface is interface-typed by design
 func (c *Client) Resolver(purlType string) source.Resolver {
 	return c.resolvers[purlType]
 }
 
-// userAgent returns the User-Agent string pin sets on every outbound
-// HTTP request. Includes the running tool version and a contact URL
-// so registry and CDN operators can attribute load and reach the
-// project if there's a problem.
 func userAgent() string {
 	return "pin/" + ToolVersion + " (+https://github.com/git-pkgs/pin)"
 }
 
-// loadTrustedRoot returns the Sigstore TUF trust root, caching it
-// locally so a second sync within the metadata's validity window
-// reuses the cached root without a network round-trip. Used by the
-// top-level shims when SyncOptions.VerifyProvenance is set.
+// loadTrustedRoot caches the Sigstore TUF trust root locally so a
+// second sync within the metadata's validity window skips the network
+// round-trip.
 func loadTrustedRoot() (*root.TrustedRoot, error) {
 	cachePath, err := pinTUFCachePath()
 	if err != nil {
@@ -173,9 +146,6 @@ func pinTUFCachePath() (string, error) {
 	return filepath.Join(dir, "pin", "sigstore-tuf"), nil
 }
 
-// clientFromSyncOptions builds a Client for the one-shot top-level
-// pin.Sync path. Library consumers wanting reuse construct a Client
-// directly with New.
 func clientFromSyncOptions(opts SyncOptions) (*Client, error) {
 	co := ClientOptions{
 		RegistryURL:   opts.RegistryURL,

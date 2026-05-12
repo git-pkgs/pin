@@ -1,8 +1,8 @@
-// Package forge resolves manifest entries against git forges. Dispatch
-// is purl-driven: pkg:github/owner/repo@ref routes to the GitHub
-// implementation, and adding pkg:gitlab, pkg:bitbucket etc. later is
-// a matter of adding cases to the type switch without changing the
-// public surface or the lockfile schema.
+// Package forge resolves manifest entries against git forges.
+// Dispatch is purl-driven: pkg:github/owner/repo@ref routes to the
+// GitHub implementation; pkg:gitlab, pkg:bitbucket etc. plug in via
+// the type switch without touching the public surface or lockfile
+// schema.
 package forge
 
 import (
@@ -14,19 +14,18 @@ import (
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/client"
 
-	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
 )
 
 type Options struct {
 	HTTPClient *client.Client
 
-	// API and CDN base URLs, overridable for tests and self-hosted forges.
+	// API and CDN base URLs; overridable for tests and self-hosted.
 	GitHubAPI   string
 	JSDelivrCDN string
 
-	// Verifier, when non-nil, validates each attestation bundle the
-	// forge path records. Nil = record-only (default).
+	// Verifier validates each attestation bundle the forge path
+	// records. Nil = record-only.
 	Verifier source.ProvenanceVerifier
 }
 
@@ -44,8 +43,7 @@ func New(opts Options) *Source {
 	}
 	c := opts.HTTPClient
 	if c == nil {
-		c = client.NewClient()
-		c.HTTPClient = safehttp.New(c.HTTPClient, safehttp.Options{})
+		c = client.NewClient(client.WithSafeHTTP())
 	}
 	return &Source{opts: opts, http: c}
 }
@@ -54,12 +52,9 @@ type Resolved = source.Resolved
 type ResolvedFile = source.ResolvedFile
 type Attestation = source.Attestation
 
-// Resolve fetches the named files for a forge-hosted package. The purl's
-// Type selects the forge (only "github" in this build); Namespace is the
-// owner, Name is the repo, Version is the ref (tag, branch, or commit
-// SHA). The ref is resolved to a commit SHA which becomes the integrity
-// anchor in PackageIntegrity and is recorded on the purl as a
-// vcs_revision qualifier.
+// Resolve fetches files for a forge-hosted package. The ref
+// (p.Version) is resolved to a commit SHA which becomes
+// PackageIntegrity and a vcs_revision purl qualifier.
 func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Resolved, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("%s/%s: forge sources require an explicit files: list", p.Namespace, p.Name)
@@ -78,8 +73,6 @@ func hashSRI384(b []byte) string {
 	return "sha384-" + base64.StdEncoding.EncodeToString(h[:])
 }
 
-// withRevision returns p augmented with a vcs_revision qualifier so the
-// commit SHA is recorded alongside the human-readable ref.
 func withRevision(p *purl.PURL, commitSHA string) string {
 	q := map[string]string{"vcs_revision": commitSHA}
 	return purl.New(p.Type, p.Namespace, p.Name, p.Version, q).String()

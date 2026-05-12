@@ -8,26 +8,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/git-pkgs/attestation"
 	"github.com/git-pkgs/purl"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/git-pkgs/pin/source/attestation"
 )
 
-// forgeFileConcurrency caps the per-entry parallelism for jsdelivr file
-// fetches inside a single forge resolve. Small enough that an outer
-// Sync with the default 8 entry concurrency doesn't fan out into
-// hundreds of CDN connections when several forge entries each list many
-// files.
+// forgeFileConcurrency caps per-entry parallelism so an outer Sync
+// with 8-way entry concurrency doesn't fan out into hundreds of CDN
+// connections.
 const forgeFileConcurrency = 4
 
 const fullSHALen = 40
 
-// fileFetch carries the result of one jsdelivr file fetch plus any
-// attestation lookup that fired off the same content. Each Goroutine
-// in resolveGitHub writes its own indexed slot, so there is no shared
-// state and the post-processing can pick the first non-nil attestation
-// by index for an order-deterministic result.
 type fileFetch struct {
 	rf     ResolvedFile
 	att    *Attestation
@@ -71,18 +63,14 @@ func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string
 		return nil, err
 	}
 
-	// Materialise the resolved-files slice in input order (slot writes
-	// are race-free; the goroutine fan-in via g.Wait establishes the
-	// happens-before for the reads here).
+	// g.Wait is the happens-before for these reads.
 	resolved := make([]ResolvedFile, len(files))
 	for i, f := range fetches {
 		resolved[i] = f.rf
 	}
 
-	// Pick the first attestation by file index. Same selection rule as
-	// the previous serial loop; with parallel fetches we walk the
-	// indexed slots rather than the natural iteration order so the
-	// result is independent of completion order.
+	// First attestation by file index — deterministic regardless of
+	// completion order.
 	var att *Attestation
 	for i, f := range fetches {
 		if f.att == nil {
@@ -110,12 +98,9 @@ func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string
 	}, nil
 }
 
-// fetchGitHubAttestation queries GitHub's attestations API for a file's
-// SHA-256 digest. Returns the parsed Attestation and the raw bundle bytes
-// (for cryptographic verification by the caller), or (nil, nil) when no
-// matching SLSA Provenance v1 bundle exists. A network error is treated
-// as "no attestation" rather than a sync failure — the attestation is
-// supplementary metadata, not a fetch dependency.
+// fetchGitHubAttestation queries GitHub's attestations API for the
+// file's SHA-256. Network errors degrade to (nil, nil): attestations
+// are supplementary metadata, not a fetch dependency.
 func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string, body []byte) (*Attestation, []byte) {
 	digest := sha256.Sum256(body)
 	url := fmt.Sprintf("%s/repos/%s/%s/attestations/sha256:%s",

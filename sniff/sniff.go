@@ -24,18 +24,13 @@ const (
 	delimLen     = 2
 )
 
-// reSourceMappingURL matches a sourceMappingURL directive in either of
-// its two forms: a line comment "//# sourceMappingURL=..." (or //@) at
-// the end of a line, or a block comment "/*# sourceMappingURL=... */".
-// Both forms get stripped by StripSourcemapURL when an entry opts in
-// via manifest's strip_sourcemap: true. Browsers only honour the LAST
-// occurrence, but stripping all of them is safe and simpler.
+// Both line- and block-comment forms of //# sourceMappingURL and
+// //@ sourceMappingURL. Browsers honour only the LAST occurrence;
+// stripping all of them is safe and simpler.
 var reSourceMappingURL = regexp.MustCompile(`(?m)(^[\t ]*//[#@]\s+sourceMappingURL=[^\r\n]*$|/\*[#@]\s+sourceMappingURL=[^*]*\*+(?:[^/*][^*]*\*+)*/)`)
 
-// StripSourcemapURL removes every sourceMappingURL directive from a
-// JavaScript source. Returned bytes preserve newlines around the
-// stripped region so line numbers in stack traces still roughly line
-// up with the original source.
+// StripSourcemapURL removes every sourceMappingURL directive,
+// preserving surrounding newlines so stack traces stay aligned.
 func StripSourcemapURL(src []byte) []byte {
 	return reSourceMappingURL.ReplaceAll(src, nil)
 }
@@ -57,9 +52,8 @@ var (
 	reTrailingCall = regexp.MustCompile(`\}\s*\)?\s*\(\s*[^)]{0,200}\)\s*;`)
 )
 
-// Format returns the detected module format of a JavaScript source.
-// Detection order matters: UMD wrappers contain markers for several
-// other formats, so it has to win first.
+// Format detects the module format. Order matters: UMD wrappers
+// contain markers for several other formats, so UMD wins first.
 func Format(src []byte) string {
 	if len(src) == 0 {
 		return Unknown
@@ -69,9 +63,9 @@ func Format(src []byte) string {
 		headSrc = src[:maxScanBytes]
 	}
 	masked := stripStringsAndComments(headSrc)
-	// The tail is checked unmasked: stripStringsAndComments walking from a
-	// buffer that starts mid-string mis-detects context, and reTrailingCall
-	// is structural enough (}, ), (, ;, end-of-string) to not false-positive.
+	// Tail is unmasked: walking stripStringsAndComments from
+	// mid-string misreads context, and reTrailingCall is structural
+	// enough to avoid false positives.
 	tail := tailBytes(src, tailScanLen)
 
 	if reTypeofDefine.Match(masked) && reDefineAMD.Match(masked) {
@@ -103,10 +97,9 @@ func tailBytes(src []byte, n int) []byte {
 	return src[len(src)-n:]
 }
 
-// stripStringsAndComments removes the contents of string literals and
-// comments while preserving their delimiters and length-zero replacements,
-// so byte offsets stay roughly meaningful and regex matches don't fire on
-// quoted text.
+// stripStringsAndComments empties string-literal and comment bodies
+// while preserving delimiters, so regex matches don't fire inside
+// quoted text and offsets stay approximately aligned.
 func stripStringsAndComments(src []byte) []byte {
 	out := make([]byte, 0, len(src))
 	i := 0

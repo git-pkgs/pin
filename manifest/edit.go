@@ -11,14 +11,8 @@ import (
 
 const yamlIndent = 2
 
-// AddEntry inserts a new asset entry into a pin.yaml document at its
-// alphabetic position by name and writes the result. Comments and the
-// rest of the document are preserved via the yaml.v3 Node API.
-//
-// The entry is validated against the same minimum the manifest schema
-// requires on Read: Name and Version must be non-empty. This is the
-// boundary check — a library caller shouldn't be able to write a
-// pin.yaml that pin's own reader would then reject.
+// AddEntry inserts a new asset at its alphabetic position by name.
+// Comments and surrounding YAML are preserved via the Node API.
 func AddEntry(in io.Reader, out io.Writer, e Entry) error {
 	if e.Name == "" {
 		return fmt.Errorf("entry name is required")
@@ -65,8 +59,8 @@ func AddEntry(in io.Reader, out io.Writer, e Entry) error {
 	return writeValidated(out, doc)
 }
 
-// RemoveEntry removes the named asset from a pin.yaml document and writes
-// the result. Comments and the rest of the document are preserved.
+// RemoveEntry removes the named asset, preserving comments and
+// surrounding YAML.
 func RemoveEntry(in io.Reader, out io.Writer, name string) error {
 	doc, root, err := readDoc(in)
 	if err != nil {
@@ -90,12 +84,10 @@ func RemoveEntry(in io.Reader, out io.Writer, name string) error {
 	return writeValidated(out, doc)
 }
 
-// writeValidated encodes doc to a buffer, parses the buffer back via
-// Read to confirm the result is a valid manifest, and only then
-// copies the buffer to out. Catches the class of bugs where the input
-// was a YAML mapping but missing required fields (e.g. no `out:`):
-// AddEntry's structural mutations don't synthesize those fields, so
-// the output would silently re-emit something Read would reject.
+// writeValidated round-trips through Read to catch the case where
+// AddEntry mutates a YAML mapping that's structurally valid but
+// missing required fields (e.g. no `out:`): silent re-emission of
+// something Read would reject is the bug class to prevent.
 func writeValidated(out io.Writer, doc *yaml.Node) error {
 	var buf bytes.Buffer
 	if err := writeDoc(&buf, doc); err != nil {

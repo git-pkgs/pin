@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/git-pkgs/registries"
 )
 
 // SignatureMode selects how strictly dist.signatures is verified.
@@ -26,11 +28,6 @@ const (
 	SignatureModeOff
 )
 
-type npmSignature struct {
-	Sig   string `json:"sig"`
-	Keyid string `json:"keyid"`
-}
-
 type npmKey struct {
 	Expires *time.Time `json:"expires"`
 	Keyid   string     `json:"keyid"`
@@ -45,10 +42,9 @@ type keyCache struct {
 	loadErr error
 }
 
-// verifySignature checks the npm dist.signatures for a version. raw is
-// the version document JSON; integrity is its dist.integrity string;
-// name@version reconstructs the signed payload. Behaviour depends on
-// mode: warn (default) is non-fatal on absence but fatal on a bad sig.
+// verifySignature checks dist.signatures. The signed payload is
+// "name@version:integrity". Warn mode is non-fatal on absence; bad
+// signatures always fail.
 func (s *Source) verifySignature(ctx context.Context, name, version, integrity string, raw []byte) error {
 	if s.opts.SignatureMode == SignatureModeOff {
 		return nil
@@ -70,13 +66,13 @@ func (s *Source) verifySignature(ctx context.Context, name, version, integrity s
 	return nil
 }
 
-func findSignature(raw []byte) *npmSignature {
+func findSignature(raw []byte) *registries.NPMSignature {
 	if len(raw) == 0 {
 		return nil
 	}
 	var v struct {
 		Dist struct {
-			Signatures []npmSignature `json:"signatures"`
+			Signatures []registries.NPMSignature `json:"signatures"`
 		} `json:"dist"`
 	}
 	if err := json.Unmarshal(raw, &v); err != nil {
@@ -101,11 +97,8 @@ func (s *Source) fetchSigningKey(ctx context.Context, keyid string) (*npmKey, er
 	if !ok {
 		return nil, fmt.Errorf("signing key %s not in npm's published key set", keyid)
 	}
-	// Expired keys remain valid for verifying signatures made before the
-	// expiry date. npm continues to publish them in /-/npm/v1/keys for
-	// exactly this purpose. The Expires field tells publishers when to
-	// stop *making* new signatures, not consumers when to stop trusting
-	// existing ones.
+	// Expired keys stay valid for verifying signatures made before
+	// expiry; Expires is a publisher-side signal, not a consumer one.
 	return key, nil
 }
 

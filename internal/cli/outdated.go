@@ -71,9 +71,7 @@ written (provenance available).`,
 	return cmd
 }
 
-// notes formats the informational signals on an OutdatedReport that
-// don't fit into Severity: license drift, unmaintained packages, and
-// provenance gains/losses. Empty when there's nothing to say.
+// notes formats the informational signals that don't fit Severity.
 func notes(r pin.OutdatedReport) string {
 	var ns []string
 	if r.LicenseChange {

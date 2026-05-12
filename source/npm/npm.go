@@ -1,5 +1,5 @@
-// Package npm resolves manifest entries against the npm registry, anchoring
-// per-file integrity to the registry-published tarball hash.
+// Package npm resolves manifest entries against the npm registry,
+// anchoring per-file integrity to the registry-published tarball hash.
 package npm
 
 import (
@@ -17,7 +17,6 @@ import (
 	"github.com/git-pkgs/registries/client"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/git-pkgs/pin/internal/safehttp"
 	"github.com/git-pkgs/pin/source"
 )
 
@@ -25,7 +24,6 @@ const (
 	DefaultRegistryURL     = "https://registry.npmjs.org"
 	DefaultMaxTarballBytes = 100 << 20 // 100 MiB
 
-	// algSHA512 is the SRI / sigstore-policy name for the tarball anchor.
 	algSHA512 = "sha512"
 )
 
@@ -36,16 +34,14 @@ type Options struct {
 	MaxTarballBytes int64
 	HTTPClient      *client.Client
 
-	// Verifier, when non-nil, validates each attestation bundle the npm
-	// path records. Nil = record-only; a non-nil verifier promotes
-	// attestations to a hard fetch dependency.
+	// Verifier validates each attestation bundle the npm path records.
+	// Nil = record-only; a non-nil verifier promotes attestations to a
+	// hard fetch dependency.
 	Verifier source.ProvenanceVerifier
 
-	// SignatureMode controls verification of npm's dist.signatures (the
-	// ECDSA signature over {name}@{version}:{integrity}). Default warn.
 	SignatureMode SignatureMode
 
-	// test hook: forces a different package integrity to provoke a mismatch.
+	// test hook to force an integrity mismatch.
 	overrideIntegrity func(name string) string
 }
 
@@ -64,13 +60,11 @@ func New(opts Options) *Source {
 	}
 	c := opts.HTTPClient
 	if c == nil {
-		c = client.NewClient()
-		c.HTTPClient = safehttp.New(c.HTTPClient, safehttp.Options{})
+		c = client.NewClient(client.WithSafeHTTP())
 	}
 	return &Source{opts: opts, http: c}
 }
 
-// Resolved and ResolvedFile are re-exported from source for compatibility.
 type Resolved = source.Resolved
 type ResolvedFile = source.ResolvedFile
 
@@ -85,23 +79,20 @@ type npmVersion struct {
 	} `json:"dist"`
 }
 
-// Resolve fetches the named files for the package identified by p (whose
-// Type must be "npm"). When files is nil, the package's declared entry
-// point is used.
+// Resolve fetches the named files for the package identified by p
+// (whose Type must be "npm"). When files is nil, the package's
+// declared entry point is used.
 func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Resolved, error) {
 	name := p.FullName()
 	version := p.Version
 
-	meta, metaRaw, err := s.fetchMetadataRaw(ctx, name, version)
+	meta, metaRaw, err := s.fetchMetadataRaw(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 
-	// After the version document is in hand, the tarball fetch and the
-	// dist.attestations list fetch are independent network calls. Run
-	// them in parallel. Each goroutine writes exactly one named local
-	// variable; g.Wait below is the happens-before barrier for the
-	// reads that follow.
+	// Tarball and attestations fetch in parallel. g.Wait is the
+	// happens-before barrier for the reads that follow.
 	var tarball []byte
 	var att *source.Attestation
 	var attBundle []byte
@@ -115,9 +106,8 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 		return nil
 	})
 	g.Go(func() error {
-		// Attestation fetch is supplementary metadata; a network
-		// failure here should not break sync. Match the previous
-		// behaviour (error discarded).
+		// Supplementary metadata: a network failure here must not
+		// break sync.
 		a, ab, _ := s.fetchAttestationWithBundle(gctx, json.RawMessage(metaRaw))
 		att = a
 		attBundle = ab
@@ -132,6 +122,10 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 		wantIntegrity = s.opts.overrideIntegrity(name)
 	}
 	if err := verifyTarball(tarball, wantIntegrity); err != nil {
+		return nil, fmt.Errorf("%s@%s: %w", name, version, err)
+	}
+
+	if err := validateTarballEntries(tarball); err != nil {
 		return nil, fmt.Errorf("%s@%s: %w", name, version, err)
 	}
 
@@ -177,8 +171,9 @@ func (s *Source) Resolve(ctx context.Context, p *purl.PURL, files []string) (*Re
 	}, nil
 }
 
-func (s *Source) fetchMetadataRaw(ctx context.Context, name, version string) (*npmVersion, []byte, error) {
-	u := strings.TrimRight(s.opts.RegistryURL, "/") + "/" + name + "/" + url.PathEscape(version)
+func (s *Source) fetchMetadataRaw(ctx context.Context, p *purl.PURL) (*npmVersion, []byte, error) {
+	name, version := p.FullName(), p.Version
+	u := strings.TrimRight(s.registryURLFor(p), "/") + "/" + name + "/" + url.PathEscape(version)
 	body, err := s.http.GetBody(ctx, u)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fetch %s@%s metadata: %w", name, version, err)
@@ -295,13 +290,11 @@ func parseRepository(raw json.RawMessage) string {
 	return ""
 }
 
-// canonicalRepoURL turns the various shapes registries return in
-// package.json's `repository.url` field (`git+https://`, `git://`,
-// `ssh://git@`, scp-style `git@host:owner/repo`) into a canonical
-// `https://host/owner/repo` form. It is a one-way conversion for
-// storage in the lockfile, NOT a comparator — the equivalent for the
-// publisher-matches-repository check lives in trust.go as
-// normaliseRepoURL.
+// canonicalRepoURL normalises the shapes registries return for
+// repository.url (`git+https://`, `git://`, `ssh://git@`,
+// `git@host:owner/repo`) into `https://host/owner/repo` for storage
+// in the lockfile. NOT a comparator — the equivalent for the
+// publisher-matches-repository check is trust.go's normaliseRepoURL.
 func canonicalRepoURL(u string) string {
 	u = strings.TrimPrefix(u, "git+")
 	u = strings.TrimSuffix(u, ".git")

@@ -8,13 +8,10 @@ import (
 	"github.com/git-pkgs/pin/manifest"
 )
 
-// enforceTrust applies the manifest trust block plus CLI overrides
-// (--strict-provenance, --require-publisher-matches-repository) to each
-// entry. Per-entry trust overrides the manifest top level; CLI flags
-// override both (you can't opt an entry out of a flag-forced policy).
-// trusted_workflows is additive: any workflow URI listed there satisfies
-// the publisher-matches-repository check even when the package's
-// repository.url disagrees.
+// enforceTrust applies trust policy. Precedence: CLI flags override
+// manifest, which overrides per-entry. trusted_workflows is additive
+// — a matching workflow URI satisfies publisher-matches-repository
+// even when repository.url disagrees.
 func enforceTrust(m *manifest.Manifest, l *lock.Lock, opts SyncOptions) error {
 	entryByName := map[string]*manifest.Entry{}
 	for i := range m.Assets {
@@ -62,9 +59,6 @@ func enforceTrust(m *manifest.Manifest, l *lock.Lock, opts SyncOptions) error {
 	return nil
 }
 
-// publisherMismatch returns the error message when the attestation's
-// source repository doesn't match the package's declared repository,
-// or empty when it does or the trusted_workflows allowlist permits it.
 func publisherMismatch(a *lock.Asset, trustedWorkflows []string) string {
 	want := normaliseRepoURL(a.Repository)
 	got := normaliseRepoURL(a.Attestation.SourceRepository)
@@ -79,12 +73,9 @@ func publisherMismatch(a *lock.Asset, trustedWorkflows []string) string {
 	return fmt.Sprintf("%s@%s: attestation built from %s but package.json says %s", a.Name, a.Version, got, want)
 }
 
-// normaliseRepoURL strips scheme, trailing .git, trailing slash, and
-// github-style subpaths (`/tree/<branch>/<path>`, `/blob/...`) so two
-// URLs pointing at the same repo compare equal even when one references
-// a subdirectory within a monorepo. Used by the publisher-matches
-// comparison; the npm package has its own canonicalRepoURL that handles
-// the git+/ssh:// shapes registries return.
+// normaliseRepoURL strips scheme, trailing .git, slash, and
+// /tree/<branch>/ or /blob/ subpaths so monorepo subdirectory
+// references compare equal to the bare repo URL.
 func normaliseRepoURL(u string) string {
 	u = strings.TrimSuffix(u, "/")
 	u = strings.TrimSuffix(u, ".git")

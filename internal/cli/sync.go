@@ -9,9 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ciEnvVars is the set of environment variable names that indicate the
-// process is running under a CI system. When one of these is set and
-// --frozen isn't passed, pin sync prints a one-line nudge.
 var ciEnvVars = []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "JENKINS_URL"}
 
 func detectCI() string {

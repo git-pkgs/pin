@@ -6,25 +6,16 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/git-pkgs/attestation"
+	"github.com/git-pkgs/registries"
+
 	"github.com/git-pkgs/pin/source"
-	"github.com/git-pkgs/pin/source/attestation"
 )
 
-// Attestation re-exports source.Attestation for internal use.
 type Attestation = source.Attestation
 
-// distAttestationsRef is the shape of dist.attestations in an npm version
-// document: a single pointer to a separate attestations endpoint, plus a
-// hint about what predicate types live there.
-type distAttestationsRef struct {
-	URL        string `json:"url"`
-	Provenance struct {
-		PredicateType string `json:"predicateType"`
-	} `json:"provenance"`
-}
-
-// fetchAttestationWithBundle returns both the parsed metadata and the raw
-// bundle JSON, the latter useful for cryptographic verification.
+// fetchAttestationWithBundle returns parsed metadata plus the raw
+// bundle bytes for the caller to verify cryptographically.
 func (s *Source) fetchAttestationWithBundle(ctx context.Context, raw json.RawMessage) (*Attestation, []byte, error) {
 	ref := findAttestationRef(raw)
 	if ref == nil {
@@ -66,13 +57,13 @@ func (s *Source) fetchAttestationWithBundle(ctx context.Context, raw json.RawMes
 	return nil, nil, nil
 }
 
-func findAttestationRef(raw json.RawMessage) *distAttestationsRef {
+func findAttestationRef(raw json.RawMessage) *registries.NPMAttestationRef {
 	if len(raw) == 0 {
 		return nil
 	}
 	var v struct {
 		Dist struct {
-			Attestations *distAttestationsRef `json:"attestations"`
+			Attestations *registries.NPMAttestationRef `json:"attestations"`
 		} `json:"dist"`
 	}
 	if err := json.Unmarshal(raw, &v); err != nil {

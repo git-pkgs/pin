@@ -1,10 +1,9 @@
 // Package assets is the runtime helper a Go web app uses to consume
-// pin's output: parse the lockfile, serve the vendored files, and emit
-// HTML tags with integrity attributes.
+// pin's output: parse the lockfile, serve the vendored files, and
+// emit HTML tags with integrity attributes.
 //
-// Importing this package pulls in only the lock and integrity packages,
-// not the npm fetcher or any HTTP machinery, so it stays lean for
-// servers that only need to render templates.
+// Imports only lock — no fetcher, no HTTP — so servers that only
+// render templates stay lean.
 package assets
 
 import (
@@ -27,6 +26,8 @@ func Parse(r io.Reader) (*Lock, error) {
 
 // FS returns a sub-filesystem rooted at the lockfile's out directory.
 // Pass an embed.FS that includes the vendored tree at outDir.
+//
+//nolint:ireturn // io/fs.FS-shaped surface is interface-typed by design
 func FS(fsys fs.FS, l *Lock) (fs.FS, error) {
 	if l.OutDir == "" {
 		return fsys, nil
@@ -34,18 +35,15 @@ func FS(fsys fs.FS, l *Lock) (fs.FS, error) {
 	return fs.Sub(fsys, l.OutDir)
 }
 
-// Options controls how tags are rendered.
 type Options struct {
-	// Prefix is prepended to each asset's out path to form the src/href.
-	// Typically the route the static file server is mounted under,
-	// e.g. "/static/vendor/". A trailing slash is not added.
+	// Prefix is prepended to each asset's out path. Typically the
+	// route a static file server is mounted under, e.g.
+	// "/static/vendor/". No trailing slash is added.
 	Prefix string
 }
 
 // Tag returns one HTML tag per file the named package vendored, in
-// lockfile order. Use this when load order matters (stylesheets,
-// scripts with extension dependencies) so the template chooses
-// order explicitly.
+// lockfile order. Use this when load order matters.
 func Tag(l *Lock, name string, opts Options) []template.HTML {
 	var out []template.HTML
 	for _, a := range l.Assets {
@@ -56,9 +54,9 @@ func Tag(l *Lock, name string, opts Options) []template.HTML {
 	return out
 }
 
-// Tags returns one HTML tag per file of the given asset type across all
-// packages, in lockfile (alphabetic) order. Fine for fonts and images;
-// not recommended for stylesheets or scripts where load order matters.
+// Tags returns one HTML tag per file of the given asset type, in
+// lockfile (alphabetic) order. Fine for fonts and images; not
+// recommended for stylesheets or scripts where load order matters.
 func Tags(l *Lock, assetType string, opts Options) []template.HTML {
 	var out []template.HTML
 	for _, a := range l.Assets {

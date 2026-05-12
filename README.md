@@ -82,6 +82,18 @@ When `files:` is omitted for an npm source, `pin` reads the package's `package.j
 
 `github:` sources resolve the tag to a commit SHA, fetch via jsdelivr's `/gh/` mirror, and record the SHA in the lockfile as the integrity anchor. `url:` sources hash the bytes on first fetch and verify against the recorded hash on every subsequent sync. Both go through the same `source.Resolver` interface, so adding gitlab/codeberg/bitbucket later is a single new file.
 
+`--registry` (or `SyncOptions.RegistryURL`) overrides the npm registry for the whole sync. For a single entry, add `registry_url:` to that asset:
+
+```yaml
+assets:
+  - name: "private-pkg"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+    registry_url: "https://npm.private.example/"
+```
+
+pin records the override on the asset's purl as a `repository_url` qualifier in `pin.lock`, so the lockfile round-trips faithfully. `~/.npmrc` and registry-auth tokens are not read; private registries pin reaches today are ones that don't require credentials or whose credentials live in the URL.
+
 ## Commands
 
 ```
@@ -205,7 +217,9 @@ Source resolvers are pluggable by purl type. Register a new resolver for any pre
 c.RegisterResolver("ipfs", myIPFSResolver{})
 ```
 
-The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`, `source/attestation`, `source/sigstore`), and `assets` sub-packages are all public.
+The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `pinfs`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`, `source/attestation`, `source/sigstore`), and `assets` sub-packages are all public.
+
+`SyncOptions.FS` redirects pin's outputs (vendored files + `pin.lock`) into anything that implements `pinfs.Writer`. The default writes to local paths under `SyncOptions.Dir`; `pinfs.NewMemory()` keeps everything in process, and a custom implementation can pipe writes into a tarball, an archive, or an in-memory build artefact.
 
 `source/attestation` and `source/sigstore` have no pin-specific dependencies and can be vendored or imported independently. The shared parser turns a sigstore bundle's DSSE envelope plus in-toto statement into a SLSA Provenance v1 identity struct; the verifier wraps sigstore-go's TUF chain against any (digestAlg, digest) pair.
 
@@ -268,6 +282,20 @@ var vendored embed.FS
 ```
 
 `assets.Parse` + `assets.FS` read both from the same `embed.FS`, so the binary has no runtime filesystem dependency and no separate `static/vendor` directory to ship. `pin verify --no-fetch` runs against the on-disk copy before the build to confirm the embedded bytes are what the lockfile claims.
+
+## Stability
+
+pin commits to backwards compatibility on three surfaces.
+
+The Go API at `github.com/git-pkgs/pin` is the headline. The functions `Sync`, `Add`, `Outdated`, `Verify`, `Remove`, `List`, `Path`, `Init`, `SBOM`, `EncodeLock`, and `New`, plus the `Client` reusable-client pattern and the option, result, and error types they take, are covered. The `lock`, `manifest`, `pinfs`, and `assets` sub-packages are covered too. So are the sentinel errors. Removing or renaming any of these requires a new major version (`/v2`, `/v3`). New fields on option structs are additive and don't bump the major version.
+
+`pin.lock` carries a `pin:lockfile_version` property under the CycloneDX metadata. A binary refuses any lockfile whose version it doesn't recognise. New fields land as additive properties under the `pin:` namespace and don't bump the version. A version bump only happens on incompatible schema changes and arrives as a separate release with migration notes.
+
+`pin.yaml` follows the same shape. New fields are additive and existing fields keep their meaning across releases. Removals or semantic changes ship under a new major version with explicit migration steps.
+
+The `pinfs.Writer` interface and the `source.Resolver` interface are stable in shape: adding a method to either is a breaking change. New behaviour goes on a parallel interface or option struct instead.
+
+`api_stability_test.go` references every public symbol so a removed or renamed export breaks `go build` immediately. pkg.go.dev tracks the live exported surface.
 
 ## License
 

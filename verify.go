@@ -18,8 +18,8 @@ import (
 	"github.com/git-pkgs/purl"
 )
 
-// VerifyOptions configures pin.Verify / Client.Verify. Strict turns
-// the cheap on-disk re-hash into a tarball re-derive for npm assets.
+// VerifyOptions: Strict turns the cheap on-disk re-hash into a
+// tarball re-derive for npm assets.
 type VerifyOptions struct {
 	Dir         string
 	Lock        string
@@ -27,9 +27,8 @@ type VerifyOptions struct {
 	RegistryURL string
 }
 
-// VerifyResult collects the per-asset findings of a verify pass.
-// Failed reports whether any drift or missing-file was seen; extras
-// are reported but don't fail verify unless VerifyOptions.Strict.
+// VerifyResult. Failed reports whether any drift or missing-file was
+// seen; Extra is informational unless opts.Strict.
 type VerifyResult struct {
 	OK      []string
 	Missing []string
@@ -37,8 +36,6 @@ type VerifyResult struct {
 	Extra   []string
 }
 
-// Drift describes one vendored file whose on-disk SHA-384 differs
-// from the integrity recorded in the lockfile.
 type Drift struct {
 	Out      string
 	Expected string
@@ -49,16 +46,15 @@ func (r *VerifyResult) Failed() bool {
 	return len(r.Missing) > 0 || len(r.Drifted) > 0
 }
 
-// Verify is a one-shot shim around Client.Verify.
 func Verify(opts VerifyOptions) (*VerifyResult, error) {
 	c := New(ClientOptions{RegistryURL: opts.RegistryURL, SignatureMode: npm.SignatureModeOff})
 	return c.Verify(opts)
 }
 
-// Verify re-hashes every file under the lockfile's OutDir and compares
-// against the recorded integrity. With opts.Strict, npm-source entries
-// additionally re-derive their per-file integrity by re-fetching the
-// registry tarball.
+// Verify re-hashes every file under the lockfile's OutDir and
+// compares against the recorded integrity. With opts.Strict, npm
+// assets additionally re-derive their per-file integrity by
+// re-fetching the registry tarball.
 func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 	if opts.Lock == "" {
 		opts.Lock = DefaultLock
@@ -113,15 +109,10 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 	return res, nil
 }
 
-// verifyStrictNPM re-fetches each npm package's tarball from the registry,
-// re-extracts the files the lockfile claims, and compares the derived
-// per-file SHA-384 to the recorded integrity. Mismatches indicate either
-// a tampered lockfile or an upstream that re-published the same version
-// with different bytes (npm does not permit this, so it's a hard failure).
-//
-// forge and url sources are skipped: their per-file SHA-384 IS the
-// anchor (no separate tarball to re-derive from), so the standard
-// on-disk verify already provides equivalent assurance.
+// verifyStrictNPM re-fetches each npm tarball, re-extracts the
+// lockfile's claimed files, and compares the derived per-file
+// SHA-384 to the recorded integrity. forge and url sources are
+// skipped because their per-file SHA-384 already IS the anchor.
 func (c *Client) verifyStrictNPM(l *lock.Lock) ([]Drift, error) {
 	src := c.NPM
 

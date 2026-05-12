@@ -1,5 +1,5 @@
 // Package pin is the public Go API for the pin tool: read a manifest,
-// resolve assets, write them to disk, and emit a CycloneDX lockfile.
+// resolve assets, write them out, and emit a CycloneDX lockfile.
 package pin
 
 import (
@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/manifest"
+	"github.com/git-pkgs/pin/pinfs"
 	"github.com/git-pkgs/pin/source/forge"
 	"github.com/git-pkgs/pin/source/npm"
 	"golang.org/x/sync/errgroup"
@@ -32,16 +34,14 @@ const (
 	filePerm = 0o644
 )
 
-// ToolVersion is the tool-version string written to pin.lock's
-// metadata.tools[]. Overridden at build time via the
+// ToolVersion is overridden at build time via the
 // `-X github.com/git-pkgs/pin.ToolVersion=X.Y.Z` ldflag.
 var ToolVersion = "dev"
 
-// SyncOptions configures pin.Sync / Client.Sync. Per-call fields
-// (DryRun, Frozen, Update, ...) belong here; client-config fields
-// (RegistryURL, Forge, ...) are honoured by the top-level pin.Sync
-// shim only — pass them via ClientOptions when constructing a Client
-// directly.
+// SyncOptions configures pin.Sync / Client.Sync. RegistryURL, Forge,
+// SignatureMode, and VerifyProvenance are honoured by the top-level
+// pin.Sync shim only; pass them via ClientOptions when constructing a
+// Client directly.
 type SyncOptions struct {
 	Dir         string
 	Manifest    string
@@ -51,61 +51,49 @@ type SyncOptions struct {
 	RegistryURL string
 	Forge       forge.Options
 
-	// Update names whose lock-is-sticky check is bypassed: those entries
-	// re-resolve against the registry even if the locked version still
-	// satisfies the manifest constraint.
-	Update []string
-	// UpdateAll bypasses lock-is-sticky for every entry.
+	// Update lists entry names whose lock-is-sticky check is
+	// bypassed; UpdateAll bypasses it for every entry.
+	Update    []string
 	UpdateAll bool
 
-	// StrictProvenance fails sync when an npm entry resolves to a version
-	// that has no SLSA Provenance attestation recorded by the registry.
+	// StrictProvenance fails sync when an npm entry resolves to a
+	// version with no SLSA Provenance attestation recorded.
 	StrictProvenance bool
 
-	// RequirePublisherMatchesRepository fails sync when an attestation's
-	// build workflow lives on a different repository than the package's
-	// declared repository.url. This is the key consumer-side check
-	// against leaked-token attacks: an attacker with a stolen publish
-	// token can produce a technically valid attestation from their own
-	// CI, but the source_repository field will not match the legitimate
-	// package's repo.
+	// RequirePublisherMatchesRepository fails sync when an
+	// attestation's build workflow lives on a different repository
+	// than the package's declared repository.url. The consumer-side
+	// check against leaked-token attacks: a stolen publish token
+	// produces an attestation whose source_repository won't match.
 	RequirePublisherMatchesRepository bool
 
 	// VerifyProvenance cryptographically verifies each attestation
-	// bundle against Sigstore's TUF trust root (Fulcio cert chain,
-	// Rekor inclusion proof, DSSE signature, subject digest matches
-	// the fetched tarball). Implies fetching the trust root from TUF.
+	// bundle against Sigstore's TUF trust root.
 	VerifyProvenance bool
 
-	// SignatureMode controls npm dist.signatures (ECDSA over
-	// {name}@{version}:{integrity}) verification. Warn (default) verifies
-	// when a signature is present and fails on a bad one; enforce
-	// additionally fails on missing signatures; off skips verification.
 	SignatureMode npm.SignatureMode
 
-	// Concurrency caps the number of entries Sync resolves in parallel.
-	// Zero means defaultConcurrency. The lockfile order is independent of
-	// completion order: assets are sorted by (name, asset.out) before the
-	// file is written, so determinism is preserved regardless of how
-	// resolves interleave.
+	// Concurrency caps parallel resolves; zero = defaultConcurrency.
+	// Lockfile order is independent of completion order: assets are
+	// sorted by (name, asset.out) before writing.
 	Concurrency int
 
-	// NoFetch is the CI cheap-assertion mode: implies Frozen (bail before
-	// any network if manifest and lockfile disagree) and additionally
-	// verifies that every vendored file on disk hashes to the integrity
-	// recorded in the lockfile. Designed for CI jobs that vendored at
-	// image-build time and just want to assert nothing was tampered with
-	// after checkout. No network, no writes.
+	// NoFetch implies Frozen and re-hashes every vendored file on
+	// disk against the lockfile's recorded integrity. For CI jobs
+	// that vendored at image-build time. No network, no writes.
 	NoFetch bool
+
+	// FS redirects Sync's outputs (vendored files + pin.lock). nil
+	// means pinfs.OS(opts.Dir). pinfs.NewMemory() keeps everything in
+	// process. The manifest and prior lockfile are still read from
+	// opts.Dir on local disk.
+	FS pinfs.Writer
 }
 
 func (o *SyncOptions) forceResolve(name string) bool {
 	return o.UpdateAll || slices.Contains(o.Update, name)
 }
 
-// SyncResult is the outcome of pin.Sync: the resolved lockfile, the
-// diff against the previous lockfile, and the paths written and
-// removed under the manifest's out: directory.
 type SyncResult struct {
 	Lock    *lock.Lock
 	Changes lock.Changes
@@ -113,10 +101,8 @@ type SyncResult struct {
 	Removed []string
 }
 
-// Sync is a one-shot shim around Client.Sync that constructs a Client
-// from the client-config fields embedded in SyncOptions (RegistryURL,
-// Forge, SignatureMode, VerifyProvenance). Library consumers that
-// reuse a Client across calls should use New + Client.Sync directly.
+// Sync constructs a Client from opts and runs one Sync. Consumers
+// that reuse a Client across calls should use New + Client.Sync.
 func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	c, err := clientFromSyncOptions(opts)
 	if err != nil {
@@ -125,12 +111,9 @@ func Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	return c.Sync(ctx, opts)
 }
 
-// Sync resolves the manifest, fetches assets, and writes the lockfile.
-// Per-operation behaviour (DryRun, Frozen, Update, NoFetch, ...) lives
-// in opts; infrastructure config (RegistryURL, SignatureMode, ...)
-// comes from the Client created via New. The client-config fields on
-// SyncOptions are ignored — they exist for the package-level Sync
-// shim only.
+// Sync resolves the manifest, fetches assets, and writes the
+// lockfile. Per-operation behaviour comes from opts; infrastructure
+// config (RegistryURL, SignatureMode, ...) comes from the Client.
 func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error) {
 	if opts.Manifest == "" {
 		opts.Manifest = DefaultManifest
@@ -161,6 +144,11 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 		}
 	}
 
+	fw := opts.FS
+	if fw == nil {
+		fw = pinfs.OS(opts.Dir)
+	}
+
 	next := &lock.Lock{OutDir: m.Out}
 	var written []string
 
@@ -169,10 +157,6 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 		concurrency = defaultConcurrency
 	}
 
-	type entryResult struct {
-		assets []lock.Asset
-		files  []fileContent
-	}
 	results := make([]entryResult, len(m.Assets))
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(concurrency)
@@ -197,13 +181,16 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 
 	for _, r := range results {
 		next.Assets = append(next.Assets, r.assets...)
-		if !opts.DryRun {
-			w, werr := writeFiles(opts.Dir, m.Out, r.files)
-			if werr != nil {
-				return nil, werr
-			}
-			written = append(written, w...)
+	}
+	if err := checkOutCollisions(next.Assets); err != nil {
+		return nil, err
+	}
+	if !opts.DryRun {
+		w, werr := writeAllFiles(fw, m.Out, results)
+		if werr != nil {
+			return nil, werr
 		}
+		written = w
 	}
 
 	changes := lock.Diff(prev, next)
@@ -214,11 +201,11 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 
 	var removed []string
 	if !opts.DryRun {
-		removed, err = removeOrphans(opts.Dir, m.Out, changes.Removed)
+		removed, err = removeOrphans(fw, m.Out, changes.Removed)
 		if err != nil {
 			return nil, err
 		}
-		if err := writeLock(filepath.Join(opts.Dir, opts.Lock), next); err != nil {
+		if err := writeLock(fw, opts.Lock, next); err != nil {
 			return nil, err
 		}
 	}
@@ -226,9 +213,6 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 	return &SyncResult{Lock: next, Changes: changes, Written: written, Removed: removed}, nil
 }
 
-// syncNoFetch implements --no-fetch: verify manifest and lockfile agree
-// (frozen-style), and re-hash every file under m.Out against the
-// lockfile's recorded integrity. No network, no writes.
 func (c *Client) syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) (*SyncResult, error) {
 	if prev == nil {
 		return nil, fmt.Errorf("--no-fetch: %w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
@@ -246,36 +230,53 @@ func (c *Client) syncNoFetch(opts SyncOptions, m *manifest.Manifest, prev *lock.
 	return &SyncResult{Lock: prev, Changes: lock.Diff(prev, prev)}, nil
 }
 
-// safeOut returns an error if any joined path component would let a
-// vendored file escape the project's out directory. Defence in depth:
-// the manifest validates files: paths and slugs are built from sanitised
-// names, but the joined output path is checked one more time before any
-// bytes hit the disk.
-func safeOut(dir, outDir, out string) (string, error) {
-	root := filepath.Clean(filepath.Join(dir, outDir))
-	dst := filepath.Clean(filepath.Join(root, filepath.FromSlash(out)))
-	rel, err := filepath.Rel(root, dst)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: out=%q resolves to %q", ErrPathEscape, out, dst)
-	}
-	return dst, nil
+type entryResult struct {
+	assets []lock.Asset
+	files  []fileContent
 }
 
-func writeFiles(dir, outDir string, files []fileContent) ([]string, error) {
+func writeAllFiles(fw pinfs.Writer, outDir string, results []entryResult) ([]string, error) {
+	var written []string
+	for _, r := range results {
+		w, err := writeFiles(fw, outDir, r.files)
+		if err != nil {
+			return nil, err
+		}
+		written = append(written, w...)
+	}
+	return written, nil
+}
+
+// safeOut returns a slash-separated path under outDir, or
+// ErrPathEscape. Defence in depth on top of manifest validation: the
+// joined output path is checked one more time before any bytes leave
+// pin's process.
+func safeOut(outDir, out string) (string, error) {
+	cleanDir := path.Clean(outDir)
+	if cleanDir != "" && cleanDir != "." && !fs.ValidPath(cleanDir) {
+		return "", fmt.Errorf("%w: outDir %q is not a valid relative slash path", ErrPathEscape, outDir)
+	}
+	joined := path.Clean(path.Join(outDir, out))
+	if !fs.ValidPath(joined) {
+		return "", fmt.Errorf("%w: out=%q resolves outside outDir", ErrPathEscape, out)
+	}
+	if cleanDir == "" || cleanDir == "." {
+		return joined, nil
+	}
+	if joined == cleanDir || strings.HasPrefix(joined, cleanDir+"/") {
+		return joined, nil
+	}
+	return "", fmt.Errorf("%w: out=%q resolves outside outDir %q", ErrPathEscape, out, outDir)
+}
+
+func writeFiles(fw pinfs.Writer, outDir string, files []fileContent) ([]string, error) {
 	var written []string
 	for _, f := range files {
-		dst, err := safeOut(dir, outDir, f.out)
+		rel, err := safeOut(outDir, f.out)
 		if err != nil {
 			return written, err
 		}
-		if err := os.MkdirAll(filepath.Dir(dst), dirPerm); err != nil {
-			return written, err
-		}
-		tmp := dst + ".tmp"
-		if err := os.WriteFile(tmp, f.content, filePerm); err != nil {
-			return written, err
-		}
-		if err := os.Rename(tmp, dst); err != nil {
+		if err := fw.WriteFile(rel, f.content); err != nil {
 			return written, err
 		}
 		written = append(written, f.out)
@@ -283,41 +284,38 @@ func writeFiles(dir, outDir string, files []fileContent) ([]string, error) {
 	return written, nil
 }
 
-func removeOrphans(dir, outDir string, orphans []lock.Asset) ([]string, error) {
-	root := filepath.Join(dir, outDir)
+func removeOrphans(fw pinfs.Writer, outDir string, orphans []lock.Asset) ([]string, error) {
 	var removed []string
-	parents := map[string]bool{}
 	for _, a := range orphans {
-		p := filepath.Join(root, filepath.FromSlash(a.Out))
-		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		rel, err := safeOut(outDir, a.Out)
+		if err != nil {
+			return removed, err
+		}
+		if err := fw.Remove(rel); err != nil {
 			return removed, fmt.Errorf("remove orphan %s: %w", a.Out, err)
 		}
 		removed = append(removed, a.Out)
-		parents[filepath.Dir(p)] = true
-	}
-	for parent := range parents {
-		pruneEmpty(parent, root)
 	}
 	return removed, nil
 }
 
-func pruneEmpty(dir, stop string) {
-	for dir != stop && dir != "." && dir != string(filepath.Separator) {
-		entries, err := os.ReadDir(dir)
-		if err != nil || len(entries) > 0 {
-			return
+// checkOutCollisions fails closed when two resolved assets share an
+// Out path. Hits most often under layout: flat when packages or
+// per-entry file lists collide on basename. Reports the first pair so
+// the user can fix the manifest before any bytes are written.
+func checkOutCollisions(assets []lock.Asset) error {
+	seen := make(map[string]string, len(assets))
+	for _, a := range assets {
+		if prev, ok := seen[a.Out]; ok {
+			return fmt.Errorf("%w: %q claimed by both %s and %s", ErrPathCollision, a.Out, prev, a.Name)
 		}
-		if err := os.Remove(dir); err != nil {
-			return
-		}
-		dir = filepath.Dir(dir)
+		seen[a.Out] = a.Name
 	}
+	return nil
 }
 
-// checkFrozen fails fast, before any network call, if the manifest and
-// lockfile are inconsistent. Under --frozen the lockfile is the contract:
-// every manifest entry must already be locked at a satisfying version, and
-// every locked asset must still be claimed by a manifest entry.
+// checkFrozen fails fast, before any network call, if manifest and
+// lockfile disagree.
 func checkFrozen(m *manifest.Manifest, prev *lock.Lock, prevVersions map[string]string) error {
 	if prev == nil {
 		return fmt.Errorf("%w: no lockfile present; run sync without --frozen first", ErrFrozenDrift)
@@ -373,24 +371,19 @@ func readLock(path string) (*lock.Lock, error) {
 	return lock.Read(f)
 }
 
-func writeLock(path string, l *lock.Lock) error {
+func writeLock(fw pinfs.Writer, lockPath string, l *lock.Lock) error {
+	if !fs.ValidPath(lockPath) {
+		return fmt.Errorf("%w: lockfile path %q is not a valid relative slash path", ErrPathEscape, lockPath)
+	}
 	encoded, err := EncodeLock(l)
 	if err != nil {
 		return err
 	}
-	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, encoded) {
-		return nil
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, encoded, filePerm); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return fw.WriteFile(lockPath, encoded)
 }
 
 // EncodeLock returns the lockfile bytes for l using the current tool
-// name and version. Useful for --dry-run --json and for byte-comparison
-// against an existing lockfile.
+// name and version.
 func EncodeLock(l *lock.Lock) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := lock.Write(&buf, l, ToolName, ToolVersion); err != nil {

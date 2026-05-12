@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-pkgs/cooldown"
 	"github.com/git-pkgs/purl"
 	"gopkg.in/yaml.v3"
 )
@@ -36,23 +37,24 @@ type Entry struct {
 	Trust          *Trust    `yaml:"trust"`
 	StripSourcemap bool      `yaml:"strip_sourcemap"`
 
+	// RegistryURL overrides the default npm registry for this entry.
+	// Honoured by the npm source kind; encoded as a `repository_url`
+	// qualifier on the resolved purl so it round-trips into pin.lock.
+	RegistryURL string `yaml:"registry_url"`
+
 	src Source
 }
 
-// Trust collects the provenance-verification policy for the manifest or
-// for a single entry. Nil pointers on RequireProvenance and
-// RequirePublisherMatchesRepository let the manifest default propagate;
-// nil on the slice fields means "use the parent's list" rather than
-// "explicitly empty."
+// Trust. Nil pointers let the manifest default propagate; nil
+// TrustedWorkflows means "inherit from parent" rather than "empty".
 type Trust struct {
 	RequireProvenance                 *bool    `yaml:"require_provenance"`
 	RequirePublisherMatchesRepository *bool    `yaml:"require_publisher_matches_repository"`
 	TrustedWorkflows                  []string `yaml:"trusted_workflows"`
 }
 
-// EffectiveTrust resolves the trust policy for an entry: per-entry
-// scalar overrides win over the manifest top level; the slice fields
-// merge (entry's plus manifest's, deduped).
+// EffectiveTrust: per-entry scalars override manifest scalars;
+// TrustedWorkflows merges across both, deduped.
 func (m *Manifest) EffectiveTrust(e *Entry) Trust {
 	var out Trust
 	if m.Trust != nil {
@@ -89,35 +91,43 @@ func mergeUnique(a, b []string) []string {
 	return out
 }
 
-// BoolValue is a helper so callers can write t.Require(t.RequireProvenance)
-// rather than dereference-and-default boilerplate.
 func BoolValue(b *bool) bool {
 	return b != nil && *b
 }
 
-// DefaultMinReleaseAge is the default cooldown window applied when the
-// manifest doesn't specify one. Most malicious npm versions are caught
-// within 24–48 hours; defaulting to 48h blocks the majority of
-// fresh-publish supply-chain attacks at the cost of a bounded lag on
-// bleeding-edge releases. Opt out per entry or globally with
-// `min_release_age: 0`.
+// DefaultMinReleaseAge: 48h catches most malicious npm publishes
+// (typically detected within 24–48h) while keeping the bleeding-edge
+// lag bounded. Opt out per entry or globally with `min_release_age: 0`.
 const DefaultMinReleaseAge = 48 * time.Hour
 
-// EffectiveMinReleaseAge returns the cooldown to apply to an entry:
-// per-entry override if set, manifest default if set, otherwise the
-// global default.
-func (m *Manifest) EffectiveMinReleaseAge(e *Entry) time.Duration {
-	if e.MinReleaseAge != nil {
-		return time.Duration(*e.MinReleaseAge)
+// Cooldown builds a cooldown.Config from the manifest's
+// min_release_age. Default falls back to DefaultMinReleaseAge.
+// Per-entry overrides become Packages entries keyed by the entry's
+// package purl without a version.
+func (m *Manifest) Cooldown() *cooldown.Config {
+	cfg := &cooldown.Config{Default: durationStr(m.MinReleaseAge, DefaultMinReleaseAge)}
+	for i := range m.Assets {
+		e := &m.Assets[i]
+		if e.MinReleaseAge == nil {
+			continue
+		}
+		key := e.PURL("").String()
+		if cfg.Packages == nil {
+			cfg.Packages = map[string]string{}
+		}
+		cfg.Packages[key] = time.Duration(*e.MinReleaseAge).String()
 	}
-	if m.MinReleaseAge != nil {
-		return time.Duration(*m.MinReleaseAge)
-	}
-	return DefaultMinReleaseAge
+	return cfg
 }
 
-// Duration is a time.Duration that unmarshals from a YAML string like
-// "48h", "30m", or "0".
+func durationStr(d *Duration, fallback time.Duration) string {
+	if d == nil {
+		return fallback.String()
+	}
+	return time.Duration(*d).String()
+}
+
+// Duration unmarshals from a YAML string like "48h", "30m", or "0".
 type Duration time.Duration
 
 func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
@@ -190,11 +200,11 @@ var allowedEntryKeys = map[string]bool{
 	"min_release_age": true,
 	"trust":           true,
 	"strip_sourcemap": true,
+	"registry_url":    true,
 }
 
-// strictAssets walks each asset's mapping node and rejects keys not in
-// allowedEntryKeys. Top-level keys are not checked, so forward-compat
-// additions like `trust:` don't break older binaries.
+// strictAssets rejects unknown keys per asset. Top-level keys are
+// not checked so forward-compat additions don't break older binaries.
 func strictAssets(raw []byte) error {
 	var partial struct {
 		Assets []yaml.Node `yaml:"assets"`
@@ -265,10 +275,11 @@ func (e *Entry) Source() Source {
 	return e.src
 }
 
-// PURL returns the canonical purl for this entry at the given resolved version.
-// npm: pkg:npm/[%40scope/]name@version
-// forge: pkg:{forge}/owner/repo@version
-// url: pkg:generic/name@version?download_url=...
+// PURL returns the canonical purl for this entry.
+//
+//	npm:   pkg:npm/[%40scope/]name@version[?repository_url=...]
+//	forge: pkg:{forge}/owner/repo@version
+//	url:   pkg:generic/name@version?download_url=...
 func (e *Entry) PURL(resolvedVersion string) *purl.PURL {
 	s := e.Source()
 	switch s.Kind {
@@ -283,7 +294,11 @@ func (e *Entry) PURL(resolvedVersion string) *purl.PURL {
 		if strings.HasPrefix(name, "@") {
 			ns, name, _ = strings.Cut(name, "/")
 		}
-		return purl.New("npm", ns, name, resolvedVersion, nil)
+		var qualifiers map[string]string
+		if e.RegistryURL != "" {
+			qualifiers = map[string]string{"repository_url": e.RegistryURL}
+		}
+		return purl.New("npm", ns, name, resolvedVersion, qualifiers)
 	}
 }
 

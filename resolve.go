@@ -15,12 +15,9 @@ import (
 	"github.com/git-pkgs/pin/source/npm"
 )
 
-// maybeStripSourcemap applies the manifest's strip_sourcemap setting
-// to a fetched file. When the entry has strip_sourcemap: true and the
-// file is a script or style, every sourceMappingURL directive is
-// removed and the SHA-384 integrity is recomputed over the stripped
-// bytes — the lockfile's recorded integrity must match what lands on
-// disk so verify-on-checkout doesn't fail.
+// maybeStripSourcemap removes sourceMappingURL directives from a
+// script or style and recomputes integrity. Integrity must reflect
+// what lands on disk so verify-on-checkout doesn't fail.
 func maybeStripSourcemap(f source.ResolvedFile, e *manifest.Entry) source.ResolvedFile {
 	if !e.StripSourcemap {
 		return f
@@ -41,20 +38,11 @@ func maybeStripSourcemap(f source.ResolvedFile, e *manifest.Entry) source.Resolv
 	return f
 }
 
-// fileContent is the resolver-to-writer handoff: where the bytes should
-// land on disk relative to the manifest's out: directory, and the bytes
-// themselves. Writes happen serially after all resolves complete (see
-// Sync); fileContent is the small in-memory carrier.
 type fileContent struct {
 	out     string
 	content []byte
 }
 
-// resolveEntry dispatches a manifest entry to the appropriate resolver
-// based on its source kind. The npm and forge paths use the typed
-// accessors (c.NPM, c.Forge) because they need source-specific APIs
-// beyond the Resolver interface; consumer-registered resolvers for
-// novel purl types are reached through c.resolvers via fallthrough.
 func (c *Client) resolveEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	src := e.Source()
 	switch src.Kind {
@@ -112,7 +100,7 @@ func (c *Client) resolveURLEntry(ctx context.Context, m *manifest.Manifest, e *m
 func (c *Client) resolveNPMEntry(ctx context.Context, m *manifest.Manifest, e *manifest.Entry, lockedVersion string) ([]lock.Asset, []fileContent, error) {
 	version := lockedVersion
 	if !npm.IsSticky(lockedVersion, e.Version) {
-		v, err := c.NPM.ResolveVersion(ctx, e.Name, e.Version, m.EffectiveMinReleaseAge(e))
+		v, err := c.NPM.ResolveVersion(ctx, e.PURL(""), e.Version, m.Cooldown())
 		if err != nil {
 			return nil, nil, err
 		}

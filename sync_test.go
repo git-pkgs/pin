@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/git-pkgs/pin/lock"
+	"github.com/git-pkgs/pin/pinfs"
 	"github.com/git-pkgs/pin/source/forge"
 )
 
@@ -832,6 +833,87 @@ assets:
 	}
 	if vr.Failed() {
 		t.Errorf("verify failed after strip — integrity not recomputed over stripped bytes: %+v", vr)
+	}
+}
+
+// TestSync_PerEntryRegistryURL exercises the `registry_url:` manifest
+// field: pin should fetch this entry from the override registry while
+// other entries (and SyncOptions.RegistryURL) keep pointing at the
+// default. Two registries serve the same name@version with different
+// bytes; the override must be the one we read.
+func TestSync_PerEntryRegistryURL(t *testing.T) {
+	defaultReg := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "default-bytes"})
+	privateReg := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "private-bytes"})
+
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+    registry_url: "`+privateReg.URL+`"
+`)
+
+	res, err := Sync(context.Background(), SyncOptions{Dir: dir, RegistryURL: defaultReg.URL})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(res.Lock.Assets) != 1 {
+		t.Fatalf("lock assets = %d, want 1", len(res.Lock.Assets))
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "v/demo/x.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "private-bytes" {
+		t.Errorf("file contents = %q, want private-bytes — the override registry was ignored", got)
+	}
+	if !strings.Contains(res.Lock.Assets[0].PURL, "repository_url=") {
+		t.Errorf("lockfile purl %q should carry the repository_url qualifier", res.Lock.Assets[0].PURL)
+	}
+}
+
+func TestSync_FSWriterMemory(t *testing.T) {
+	srv := fakeNPM(t, "demo", "1.0.0", map[string]string{"dist/x.js": "console.log('x')"})
+	dir := t.TempDir()
+	writeManifest(t, dir, `out: "v"
+assets:
+  - name: "demo"
+    version: "1.0.0"
+    files: ["dist/x.js"]
+`)
+
+	mem := pinfs.NewMemory()
+	res, err := Sync(context.Background(), SyncOptions{
+		Dir:         dir,
+		RegistryURL: srv.URL,
+		FS:          mem,
+	})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(res.Lock.Assets) != 1 {
+		t.Errorf("res.Lock.Assets = %d, want 1", len(res.Lock.Assets))
+	}
+
+	// The asset bytes and the lockfile JSON should have landed in
+	// the in-memory writer, NOT on local disk.
+	got, ok := mem.Get("v/demo/x.js")
+	if !ok {
+		t.Fatalf("expected v/demo/x.js in memory; have %v", mem.Files())
+	}
+	if string(got) != "console.log('x')" {
+		t.Errorf("memory contents = %q, want %q", got, "console.log('x')")
+	}
+	if _, ok := mem.Get("pin.lock"); !ok {
+		t.Errorf("expected pin.lock in memory; have %v", mem.Files())
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "v/demo/x.js")); !os.IsNotExist(err) {
+		t.Errorf("FSWriter override should keep disk untouched: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, DefaultLock)); !os.IsNotExist(err) {
+		t.Errorf("FSWriter override should keep disk untouched: %v", err)
 	}
 }
 

@@ -1,10 +1,9 @@
 // Package lock reads and writes pin.lock as a CycloneDX 1.6 BOM.
 //
-// The on-disk format is valid CycloneDX so any SBOM consumer can read it
-// directly. The in-memory model (Lock, Asset) is flat — one Asset per
-// vendored file — and the CycloneDX nesting (one library component per
-// package, nested file components per asset) is a serialisation detail
-// handled by Read and Write.
+// The in-memory model (Lock, Asset) is flat — one Asset per vendored
+// file. CycloneDX nesting (one library component per package, file
+// components nested under each) is a serialisation detail handled by
+// Read and Write.
 package lock
 
 import (
@@ -21,11 +20,8 @@ import (
 
 const Version = 1
 
-// MaxLockfileBytes caps the size of a lockfile a reader will accept. The
-// largest plausible scrutineer-shaped lockfile (~9 files, 311 lines) is
-// well under 10 KiB; even a 1000-file monorepo lockfile stays under 1 MiB.
-// 16 MiB is the upper bound a denial-of-service-prevention cap should
-// allow without inconveniencing real use.
+// MaxLockfileBytes is a DoS-prevention cap. A 1000-file monorepo
+// lockfile stays under 1 MiB; 16 MiB is the comfortable upper bound.
 const MaxLockfileBytes = 16 << 20
 
 type Lock struct {
@@ -48,20 +44,17 @@ type Asset struct {
 	Size             int64
 	PackageIntegrity string
 	License          string
-	// Repository is the package's declared repository URL (npm
-	// package.json repository.url, GitHub forge derives it from the
-	// owner/repo pair). Used by the publisher-matches-repository
-	// check to compare against an Attestation.SourceRepository (the
-	// repo the attestation says the build came from); the two are
-	// different things and should not be conflated.
+	// Repository is the package's *declared* repository URL. NOT to
+	// be conflated with Attestation.SourceRepository (the repo the
+	// attestation says the build came from); the
+	// publisher-matches-repository check compares the two.
 	Repository  string
 	Attestation *Attestation
 }
 
-// Attestation records the SLSA Provenance v1 fields for a package version,
-// populated when the publisher used trusted publishing. Cryptographic
-// verification of the underlying sigstore bundle is a separate step,
-// gated on `--verify-provenance` at sync time.
+// Attestation holds SLSA Provenance v1 identity fields. Cryptographic
+// verification of the underlying bundle is gated separately on
+// --verify-provenance.
 type Attestation struct {
 	PredicateType    string
 	BuilderID        string

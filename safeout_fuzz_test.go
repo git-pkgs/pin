@@ -1,22 +1,22 @@
 package pin
 
 import (
-	"path/filepath"
+	"io/fs"
 	"strings"
 	"testing"
 )
 
-// FuzzSafeOut exercises the final path-traversal check. safeOut is the
-// last line of defence before any vendored bytes hit disk: the
-// manifest validates file: paths, slug sanitisation handles the name
-// half, but safeOut is what catches anything that slipped through.
+// FuzzSafeOut exercises the final path-traversal check. safeOut is
+// the last line of defence before any vendored bytes leave pin: the
+// manifest validates files: paths and slugs are built from sanitised
+// names, but safeOut is what catches anything that slipped through.
 //
 // Two assertions, both tight:
 //
-//  1. When safeOut returns no error, the resolved path MUST stay
-//     rooted at filepath.Clean(filepath.Join(dir, outDir)).
-//     Any escape (computed path outside the root) is a security
-//     failure regardless of how the input was crafted.
+//  1. When safeOut returns no error, the resolved slash path MUST
+//     be a valid relative path (fs.ValidPath) and MUST remain rooted
+//     at the cleaned outDir. Any escape is a security failure
+//     regardless of how the input was crafted.
 //
 //  2. safeOut must never panic on any input.
 //
@@ -24,39 +24,51 @@ import (
 // rejects (absolute paths, .., scheme prefixes) so safeOut's
 // belt-and-braces role is exercised end-to-end.
 func FuzzSafeOut(f *testing.F) {
-	f.Add("/tmp/proj", "v", "demo/x.js")
-	f.Add("/tmp/proj", "v", "")
-	f.Add("/tmp/proj", "v", "/etc/passwd")
-	f.Add("/tmp/proj", "v", "../../etc/passwd")
-	f.Add("/tmp/proj", "v", "./../../etc/passwd")
-	f.Add("/tmp/proj", "v", "./demo/x.js")
-	f.Add("/tmp/proj", "v", "demo/./../../x.js")
-	f.Add("/tmp/proj", "v", "demo/../v2/x.js") // legal escape: stays inside dir
-	f.Add("/tmp/proj", "", "x.js")
-	f.Add("", "v", "x.js")
-	f.Add(".", "v", "x.js")
-	f.Add("/tmp/proj", "v", "demo\\x.js") // Windows-style separator
-	f.Add("/tmp/proj", "v", "\x00null")
-	f.Add("/tmp/proj", "v", strings.Repeat("a/", 1000)+"x.js")
-	f.Add("/tmp/proj", "..", "x.js") // outDir escape
-	f.Add("/tmp/proj", "v/../..", "x.js")
+	f.Add("v", "demo/x.js")
+	f.Add("v", "")
+	f.Add("v", "/etc/passwd")
+	f.Add("v", "../../etc/passwd")
+	f.Add("v", "./../../etc/passwd")
+	f.Add("v", "./demo/x.js")
+	f.Add("v", "demo/./../../x.js")
+	f.Add("v", "demo/../v2/x.js") // illegal: leaves outDir
+	f.Add("", "x.js")
+	f.Add(".", "x.js")
+	f.Add("v", "demo\\x.js") // Windows-style separator
+	f.Add("v", "\x00null")
+	f.Add("v", strings.Repeat("a/", 1000)+"x.js")
+	f.Add("..", "x.js")      // outDir escape
+	f.Add("v/../..", "x.js") // outDir escape (cleaned)
+	f.Add("vendor", "sub/x.js")
 
-	f.Fuzz(func(t *testing.T, dir, outDir, out string) {
-		dst, err := safeOut(dir, outDir, out)
+	f.Fuzz(func(t *testing.T, outDir, out string) {
+		dst, err := safeOut(outDir, out)
 		if err != nil {
 			return
 		}
-		// Accepted: dst must be rooted at the canonical (dir, outDir) join.
-		root := filepath.Clean(filepath.Join(dir, outDir))
-		rel, relErr := filepath.Rel(root, dst)
-		if relErr != nil {
-			t.Errorf("safeOut(%q, %q, %q) returned %q which is not Rel-able to root %q: %v",
-				dir, outDir, out, dst, root, relErr)
+		if !fs.ValidPath(dst) {
+			t.Errorf("safeOut(%q, %q) returned %q which is not fs.ValidPath",
+				outDir, out, dst)
 			return
 		}
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			t.Errorf("safeOut(%q, %q, %q) accepted but rel=%q escapes root %q",
-				dir, outDir, out, rel, root)
+		// Accepted: dst must equal cleaned outDir, or start with cleaned outDir + "/".
+		// Empty / "." outDir means "no subdir" — any valid relative path is fine.
+		switch outDir {
+		case "", ".":
+			return
 		}
+		// Compute the cleaned outDir the same way safeOut did.
+		// (Tests should mirror the implementation, not reproduce it
+		// from scratch, but we keep the assertion close to invariant.)
+		if dst == outDir || strings.HasPrefix(dst, outDir+"/") {
+			return
+		}
+		// safeOut may have cleaned outDir before comparing; allow that.
+		cleaned := strings.TrimSuffix(outDir, "/")
+		if dst == cleaned || strings.HasPrefix(dst, cleaned+"/") {
+			return
+		}
+		t.Errorf("safeOut(%q, %q) accepted %q which escapes outDir",
+			outDir, out, dst)
 	})
 }
