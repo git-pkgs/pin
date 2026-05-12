@@ -215,6 +215,60 @@ Failure modes surface as wrapped sentinel errors: `errors.Is(err, pin.ErrFrozenD
 
 A worked example: [`examples/library-consumer/main.go`](examples/library-consumer/main.go).
 
+## Framework integration
+
+The `assets` package imports only `lock` and the standard library, so any Go web framework that takes an `fs.FS` (or a directory) and any template engine that accepts `template.HTML` works without a framework-specific adapter.
+
+| Framework         | Serve                                            | Tag emission                                   |
+|-------------------|--------------------------------------------------|------------------------------------------------|
+| `net/http`        | `http.FileServer(http.FS(afs))`                  | `assets.Tag` / `Tags` in `html/template`       |
+| Chi               | `r.Handle("/vendor/*", http.FileServer(...))`    | same                                           |
+| Gin               | `r.StaticFS("/vendor", http.FS(afs))`            | template helper that returns `template.HTML`   |
+| Echo              | `e.StaticFS("/vendor", afs)`                     | renderer that accepts `template.HTML`          |
+| Fiber             | `app.Use("/vendor", filesystem.New(...))`        | engine-specific Raw helper                     |
+| [Templ](https://templ.guide) | `http.FileServer(http.FS(afs))`       | `@templ.Raw(assets.Tag(lock, name, opts)[0])`  |
+| Wails             | bundle alongside the embedded UI                 | inline in the embedded HTML                    |
+
+Common shape regardless of framework:
+
+```go
+import (
+    "bytes"
+    "embed"
+
+    "github.com/git-pkgs/pin/assets"
+)
+
+//go:embed static/vendor pin.lock
+var vendored embed.FS
+
+lockBytes, _ := vendored.ReadFile("pin.lock")
+lock, _ := assets.Parse(bytes.NewReader(lockBytes))
+afs, _ := assets.FS(vendored, lock)
+
+// afs implements fs.FS — pass to http.FileServer(http.FS(afs)) or any
+// framework's static-file handler. Render tags from your template with
+// assets.Tag(lock, "htmx.org", assets.Options{Prefix: "/vendor/"}).
+```
+
+A worked Templ integration lives in [`examples/templ/`](examples/templ/).
+
+## Embedding vendored bytes in the binary
+
+For single-binary distribution, point `pin sync` at a directory inside your module and `//go:embed` it alongside the lockfile:
+
+```yaml
+# pin.yaml
+out: "internal/web/static/vendor"
+```
+
+```go
+//go:embed internal/web/static/vendor pin.lock
+var vendored embed.FS
+```
+
+`assets.Parse` + `assets.FS` read both from the same `embed.FS`, so the binary has no runtime filesystem dependency and no separate `static/vendor` directory to ship. `pin verify --no-fetch` runs against the on-disk copy before the build to confirm the embedded bytes are what the lockfile claims.
+
 ## License
 
 MIT

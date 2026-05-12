@@ -1,0 +1,12 @@
+# Templ + htmx + Tailwind via pin. The vendored files land inside the
+# module so a `//go:embed` directive can pick them up alongside the
+# compiled templ components.
+out: "static/vendor"
+
+assets:
+  - name: "htmx.org"
+    version: "^2.0"
+    files: ["dist/htmx.min.js"]
+
+  - name: "@tailwindcss/browser"
+    version: "^4.1"

@@ -1,0 +1,5 @@
+# Templ generates `*_templ.go` from `*.templ` sources. Committing the
+# generated files would just create churn; templ users run `templ
+# generate` as a build step.
+*_templ.go
+static/vendor/

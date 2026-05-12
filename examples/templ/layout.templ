@@ -1,0 +1,37 @@
+package templ_example
+
+import (
+	"html/template"
+
+	"github.com/git-pkgs/pin/assets"
+)
+
+// Layout takes a parsed pin.Lock and renders the head section with
+// vendored script + stylesheet tags. opts.Prefix is the URL path the
+// static-file server is mounted under (typically "/vendor/").
+//
+// Each call to assets.Tag returns []template.HTML; templ.Raw renders
+// each as already-escaped HTML. The bytes have already been through
+// html.EscapeString inside the assets package.
+templ Layout(lock *assets.Lock, opts assets.Options) {
+	<!DOCTYPE html>
+	<html>
+		<head>
+			<title>pin + templ</title>
+			for _, tag := range assets.Tags(lock, "style", opts) {
+				@raw(tag)
+			}
+			for _, tag := range assets.Tags(lock, "script", opts) {
+				@raw(tag)
+			}
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
+
+// raw is the templ idiom for emitting pre-escaped HTML.
+templ raw(html template.HTML) {
+	@templ.Raw(html)
+}
