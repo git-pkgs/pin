@@ -181,7 +181,7 @@ For each vendored script, `pin` detects the module format (`esm`, `umd`, `iife`,
 
 ## As a Go library
 
-The CLI is a thin shim over the importable module:
+The CLI is a thin shim over the importable module. For one-shot scripts, the package-level functions take the same options the CLI flags wrap:
 
 ```go
 import "github.com/git-pkgs/pin"
@@ -189,9 +189,31 @@ import "github.com/git-pkgs/pin"
 res, err := pin.Sync(ctx, pin.SyncOptions{Dir: "."})
 ```
 
-`pin.Sync`, `pin.Update` (via `SyncOptions.UpdateAll`), `pin.Verify`, `pin.Outdated`, `pin.Add`, `pin.Remove`, `pin.List`, `pin.Path`, `pin.Init`, `pin.SBOM`, plus the `manifest`, `lock`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`), and `assets` sub-packages are all public.
+For long-lived processes (a Rails gem, a CI service, a custom integrator) the `pin.Client` pattern lets one instance reuse its HTTP connection pool and source resolvers across calls:
+
+```go
+c := pin.New(pin.ClientOptions{RegistryURL: "https://registry.npmjs.org"})
+
+c.Sync(ctx, pin.SyncOptions{Dir: "./app-a"})
+c.Sync(ctx, pin.SyncOptions{Dir: "./app-b"})
+c.Verify(pin.VerifyOptions{Dir: "./app-a"})
+```
+
+Source resolvers are pluggable by purl type. Register a new resolver for any prefix (`pkg:ipfs/...`, an internal artifact registry, etc.) and `Sync` will dispatch manifest entries with that purl to it:
+
+```go
+c.RegisterResolver("ipfs", myIPFSResolver{})
+```
+
+The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`, `source/attestation`, `source/sigstore`), and `assets` sub-packages are all public.
+
+`source/attestation` and `source/sigstore` have no pin-specific dependencies and can be vendored or imported independently. The shared parser turns a sigstore bundle's DSSE envelope plus in-toto statement into a SLSA Provenance v1 identity struct; the verifier wraps sigstore-go's TUF chain against any (digestAlg, digest) pair.
 
 The `assets` package is the runtime helper a Go web app uses to consume `pin`'s output: parse the lockfile, serve the vendored files via `fs.FS`, and emit HTML tags with `integrity` and `crossorigin` attributes from a template.
+
+Failure modes surface as wrapped sentinel errors: `errors.Is(err, pin.ErrFrozenDrift)`, `pin.ErrVerifyFailed`, `pin.ErrProvenanceMissing`, `pin.ErrPublisherMismatch`, `pin.ErrPathEscape`, `pin.ErrNoLockfile`.
+
+A worked example: [`examples/library-consumer/main.go`](examples/library-consumer/main.go).
 
 ## License
 

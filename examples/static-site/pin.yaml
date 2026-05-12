@@ -1,0 +1,27 @@
+# A static site built with a generator (Hugo, Eleventy, plain HTML),
+# checked-in vendored assets under static/vendor. Trust block enforces
+# provenance on every npm asset: --strict-provenance and the
+# publisher-matches-repository check turned on for the whole manifest.
+out: "static/vendor"
+
+trust:
+  require_provenance: true
+  require_publisher_matches_repository: true
+
+assets:
+  - name: "alpinejs"
+    version: "^3.14"
+    files: ["dist/cdn.min.js"]
+
+  - name: "@picocss/pico"
+    version: "^2.0"
+    files: ["css/pico.min.css"]
+
+  # A URL source uses Trust-On-First-Use integrity rather than registry
+  # anchoring; explicitly opted out of provenance enforcement.
+  - name: "vendor-icon"
+    version: "1.0.0"
+    source: "url:https://example.com/icons/icon.svg"
+    trust:
+      require_provenance: false
+      require_publisher_matches_repository: false

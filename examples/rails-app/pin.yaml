@@ -1,0 +1,24 @@
+# A Rails app using importmap-rails for ESM and standalone tags for
+# the rest. Output lands under vendor/javascript and propshaft serves
+# it. pin replaces the jspm.io dependency in importmap-rails.
+out: "vendor/javascript"
+
+assets:
+  - name: "@hotwired/turbo"
+    version: "^8.0"
+
+  - name: "@hotwired/stimulus"
+    version: "^3.2"
+
+  - name: "trix"
+    version: "^2.1"
+    files: ["dist/trix.js", "dist/trix.css"]
+
+  # GitHub source for a library that publishes its built CDN bundle to
+  # a release-only repo rather than to npm.
+  - name: "highlight.js"
+    version: "11.11.1"
+    source: "github:highlightjs/cdn-release"
+    files:
+      - "build/highlight.min.js"
+      - "build/styles/github.min.css"
