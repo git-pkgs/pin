@@ -1,8 +1,8 @@
 # pin
 
-Browser asset vendoring without npm. A single static binary that fetches files from published packages, anchors their integrity to the registry tarball, commits them to your repo, and writes a lockfile that is also a valid CycloneDX SBOM.
+pin vendors browser assets without npm: a single static binary that fetches files from published packages, anchors their integrity to the registry tarball, commits them to your repo, and writes a lockfile that is also a valid CycloneDX SBOM.
 
-If your server-rendered app needs htmx, a CSS kit, and an icon set, the honest dependency count is three. Running `npm install` for them gives you a `node_modules` with hundreds of transitive packages, a lockfile format you don't otherwise use, a Node runtime in CI, and arbitrary code execution on every install via lifecycle hooks. `pin` fetches exactly the files you name, from exactly the versions you pin, hashes them against what npm published, and writes them to disk. Nothing executes. There is no dependency tree because there are no transitive dependencies: the manifest is the bill of materials.
+If your server-rendered app needs htmx, a CSS kit, and an icon set, that's three dependencies. Running `npm install` for them gives you a `node_modules` with hundreds of transitive packages, a lockfile format you don't otherwise use, a Node runtime in CI, and arbitrary code execution on every install via lifecycle hooks. `pin` fetches the files you name at the versions you pin, hashes them against what npm published, and writes them to disk without running install scripts, hooks, or plugin loaders.
 
 ## Install
 
@@ -48,7 +48,7 @@ assets:
       - "build/styles/github.min.css"
 ```
 
-Run `pin sync`. You get:
+Run `pin sync` to get:
 
 ```
 internal/web/static/vendor/
@@ -60,9 +60,7 @@ internal/web/static/vendor/
 pin.lock
 ```
 
-The version field accepts exact pins (`2.0.6`), semver ranges (`^2.0`, `~0.3.11`), or npm dist-tags (`latest`, `next`). Once a version is locked, it stays locked: `pin sync` re-uses the locked version as long as the manifest constraint still allows it. `pin update` bumps things forward.
-
-When `files:` is omitted for an npm source, `pin` reads the package's `package.json` and picks the entry point from `jsdelivr || unpkg || browser || module || main`.
+The version field accepts exact pins (`2.0.6`), semver ranges (`^2.0`, `~0.3.11`), or npm dist-tags (`latest`, `next`). Once a version is locked, it stays locked: `pin sync` re-uses the locked version as long as the manifest constraint still allows it, and `pin update` bumps within a range. When `files:` is omitted for an npm source, `pin` reads the package's `package.json` and picks the entry point from `jsdelivr || unpkg || browser || module || main`.
 
 ## Source kinds
 
@@ -97,7 +95,7 @@ pin records the override on the asset's purl as a `repository_url` qualifier in 
 ## Commands
 
 ```
-pin sync                       resolve manifest, fetch assets, write lockfile
+pin sync                       resolve manifest, fetch assets, write lockfile (alias: pin install)
 pin sync --frozen              fail before any network if manifest and lockfile disagree (CI)
 pin sync --no-fetch            --frozen plus re-hash on-disk files against the lockfile; no network, no writes
 pin sync --concurrency=N       cap parallel resolves (default 8)
@@ -119,9 +117,9 @@ pin sbom [-f spdx|cyclonedx-xml] [-o FILE]  emit the lockfile as an SBOM
 
 The cooldown window (`min_release_age`) is on by default at 48 hours. Most malicious npm versions are caught within 24 to 48 hours, and the window blocks the majority of fresh-publish supply-chain attacks. Ranges fall back to the next-highest satisfying version outside the window; dist-tags fail with a clear error if `latest` is too fresh; exact pins bypass the window because you named the version explicitly. Opt out with `min_release_age: 0` at the manifest top level or per entry.
 
-`--frozen` is the single CI safety flag: it bails before any network if the manifest and lockfile disagree. `--no-fetch` adds a re-hash of every vendored file against the lockfile's recorded integrity on top of `--frozen` — designed for CI jobs that vendored at image-build time and want to assert nothing was tampered with after `git checkout`, with no network and no writes.
+`--frozen` is the CI safety flag: it bails before any network if the manifest and lockfile disagree. `--no-fetch` adds a re-hash of every vendored file against the lockfile's recorded integrity on top of `--frozen`, for CI jobs that vendored at image-build time and want to assert nothing was tampered with after `git checkout` without doing any network or any writes.
 
-`pin sync` rewrites the lockfile only when the manifest changed; identical bytes skip the write. The tool runs no code from a fetched package: no install scripts, no hooks, no plugin loaders. Stages 5 and 6 of [The Stages of Package Installation](https://nesbitt.io/2026/04/27/the-stages-of-package-installation.html) are absent by design.
+`pin sync` rewrites the lockfile only when the manifest changed; identical bytes skip the write. pin runs no code from a fetched package, which puts stages 5 and 6 of [The Stages of Package Installation](https://nesbitt.io/2026/04/27/the-stages-of-package-installation.html) out of scope.
 
 ## Provenance and trusted publishing
 
@@ -135,9 +133,9 @@ pin sync --strict-provenance
 
 pin sync --require-publisher-matches-repository
    fail if an attestation's source repository differs from the package's declared
-   repository.url. This is the load-bearing check against leaked-token attacks:
-   an attacker with a stolen publish token can produce a syntactically valid
-   bundle from their own CI, but the source_repository field will not match.
+   repository.url. Catches leaked-token attacks: a stolen publish token can sign
+   a valid bundle from the attacker's CI, but the source_repository field then
+   won't match the legitimate package's repo.
 
 pin sync --verify-provenance
    cryptographically verify the sigstore bundle against the live Sigstore TUF
@@ -151,7 +149,7 @@ pin sync --signature-mode {warn|enforce|off}
    tolerates absent ones; enforce additionally fails on absent.
 ```
 
-The flags are per-invocation. The persistent form is a manifest `trust:` block, top-level or per-entry:
+The persistent form of these per-invocation flags is a manifest `trust:` block, set top-level or per-entry:
 
 ```yaml
 trust:
@@ -169,19 +167,19 @@ assets:
 
 `trusted_workflows` is the escape hatch for monorepo packages whose legitimate build workflow lives on a different repo than the package's declared `repository.url`. CLI flags always win over manifest entries: `--strict-provenance` forces the check even on an entry that opted out.
 
-`pin outdated` flags a `provenance-downgrade` severity (above deprecated, below yanked) when the locked version had an attestation and the latest doesn't. That's the signal that trusted publishing was switched off by the maintainer or by whoever now controls the publish token.
+`pin outdated` flags a `provenance-downgrade` severity (above deprecated, below yanked) when the locked version had an attestation and the latest doesn't, which surfaces the case where the maintainer (or whoever now controls the publish token) disabled trusted publishing.
 
 ## Lockfile
 
 `pin.lock` is a valid CycloneDX 1.6 SBOM. Each package becomes a `library` component with the registry tarball hash; each vendored file becomes a nested `file` component with its own SHA-384, the CDN URL, and pin-specific metadata under a `pin:` property namespace. Any CycloneDX consumer (Dependency-Track, GUAC, OSV-scanner, `git-pkgs sbom`) reads it directly. `serialNumber` and `metadata.timestamp` are deliberately omitted so re-runs are byte-stable and parallel branches don't conflict on the file.
 
-Schema is documented normatively in [docs/SPEC.md](docs/SPEC.md). Defences are in [docs/SECURITY.md](docs/SECURITY.md); the structured adversary-by-asset model is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+The schema is in [docs/SPEC.md](docs/SPEC.md), the defences in [docs/SECURITY.md](docs/SECURITY.md), and the adversary-by-asset model in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Integrity
 
-On first sync of an npm package version, `pin` fetches the registry metadata, downloads the published tarball, verifies it against npm's `dist.integrity`, extracts the requested files, and computes a SHA-384 over each one. Subsequent syncs of the same version verify against the recorded hash. The CDN is a transport, not a source of truth.
+On first sync of an npm package version, `pin` fetches the registry metadata, downloads the published tarball, verifies it against npm's `dist.integrity`, extracts the requested files, and computes a SHA-384 over each one. Subsequent syncs of the same version verify against the recorded hash, so the CDN URLs in the lockfile are a transport hint rather than the integrity anchor.
 
-For `github:` sources, the commit SHA is the anchor and is recorded as a `SHA-1` hash on the library component plus a `vcs_revision` qualifier on the purl. For `url:` sources, the per-file SHA-384 is the anchor (Trust-On-First-Use).
+GitHub sources anchor on the commit SHA (recorded as a `SHA-1` hash on the library component plus a `vcs_revision` qualifier on the purl); url sources anchor on the per-file SHA-384, established Trust-On-First-Use.
 
 ## Format sniffing
 
@@ -193,7 +191,7 @@ For each vendored script, `pin` detects the module format (`esm`, `umd`, `iife`,
 
 ## As a Go library
 
-The CLI is a thin shim over the importable module. For one-shot scripts, the package-level functions take the same options the CLI flags wrap:
+For one-shot scripts, the package-level functions take the same options the CLI flags wrap (the CLI is itself a thin shim over them):
 
 ```go
 import "github.com/git-pkgs/pin"
@@ -217,15 +215,15 @@ Source resolvers are pluggable by purl type. Register a new resolver for any pre
 c.RegisterResolver("ipfs", myIPFSResolver{})
 ```
 
-The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `pinfs`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`, `source/attestation`, `source/sigstore`), and `assets` sub-packages are all public.
+The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `pinfs`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`), and `assets` sub-packages are all public.
 
 `SyncOptions.FS` redirects pin's outputs (vendored files + `pin.lock`) into anything that implements `pinfs.Writer`. The default writes to local paths under `SyncOptions.Dir`; `pinfs.NewMemory()` keeps everything in process, and a custom implementation can pipe writes into a tarball, an archive, or an in-memory build artefact.
 
-`source/attestation` and `source/sigstore` have no pin-specific dependencies and can be vendored or imported independently. The shared parser turns a sigstore bundle's DSSE envelope plus in-toto statement into a SLSA Provenance v1 identity struct; the verifier wraps sigstore-go's TUF chain against any (digestAlg, digest) pair.
+Provenance handling lives in two sibling modules: [`github.com/git-pkgs/attestation`](https://github.com/git-pkgs/attestation) (stdlib-only SLSA Provenance v1 bundle parser) and [`github.com/git-pkgs/sigstore`](https://github.com/git-pkgs/sigstore) (sigstore-go wrapper that verifies any `(digestAlg, digest)` pair against the Sigstore TUF trust root). Both can be imported independently of pin.
 
 The `assets` package is the runtime helper a Go web app uses to consume `pin`'s output: parse the lockfile, serve the vendored files via `fs.FS`, and emit HTML tags with `integrity` and `crossorigin` attributes from a template.
 
-Failure modes surface as wrapped sentinel errors: `errors.Is(err, pin.ErrFrozenDrift)`, `pin.ErrVerifyFailed`, `pin.ErrProvenanceMissing`, `pin.ErrPublisherMismatch`, `pin.ErrPathEscape`, `pin.ErrNoLockfile`.
+Failure modes surface as wrapped sentinel errors: `errors.Is(err, pin.ErrFrozenDrift)`, `pin.ErrVerifyFailed`, `pin.ErrProvenanceMissing`, `pin.ErrPublisherMismatch`, `pin.ErrPathEscape`, `pin.ErrPathCollision`, `pin.ErrNoLockfile`.
 
 A worked example: [`examples/library-consumer/main.go`](examples/library-consumer/main.go).
 
@@ -285,17 +283,15 @@ var vendored embed.FS
 
 ## Stability
 
-pin commits to backwards compatibility on three surfaces.
-
-The Go API at `github.com/git-pkgs/pin` is the headline. The functions `Sync`, `Add`, `Outdated`, `Verify`, `Remove`, `List`, `Path`, `Init`, `SBOM`, `EncodeLock`, and `New`, plus the `Client` reusable-client pattern and the option, result, and error types they take, are covered. The `lock`, `manifest`, `pinfs`, and `assets` sub-packages are covered too. So are the sentinel errors. Removing or renaming any of these requires a new major version (`/v2`, `/v3`). New fields on option structs are additive and don't bump the major version.
+The Go API at `github.com/git-pkgs/pin` covers the functions `Sync`, `Add`, `Outdated`, `Verify`, `Remove`, `List`, `Path`, `Init`, `SBOM`, `EncodeLock`, and `New`, plus the `Client` reusable-client pattern and the option, result, and error types they take. The `lock`, `manifest`, `pinfs`, and `assets` sub-packages are covered too, along with the sentinel errors. Removing or renaming any of these requires a new major version (`/v2`, `/v3`). New fields on option structs are additive and don't bump the major version.
 
 `pin.lock` carries a `pin:lockfile_version` property under the CycloneDX metadata. A binary refuses any lockfile whose version it doesn't recognise. New fields land as additive properties under the `pin:` namespace and don't bump the version. A version bump only happens on incompatible schema changes and arrives as a separate release with migration notes.
 
-`pin.yaml` follows the same shape. New fields are additive and existing fields keep their meaning across releases. Removals or semantic changes ship under a new major version with explicit migration steps.
+`pin.yaml` follows the same convention: new fields are additive, existing fields keep their meaning across releases, and removals or semantic changes ship under a new major version with explicit migration steps.
 
 The `pinfs.Writer` interface and the `source.Resolver` interface are stable in shape: adding a method to either is a breaking change. New behaviour goes on a parallel interface or option struct instead.
 
-`api_stability_test.go` references every public symbol so a removed or renamed export breaks `go build` immediately. pkg.go.dev tracks the live exported surface.
+`api_stability_test.go` references every public symbol so a removed or renamed export breaks `go build` immediately; pkg.go.dev is the live record.
 
 ## License
 
