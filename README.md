@@ -225,8 +225,6 @@ The `assets` package is the runtime helper a Go web app uses to consume `pin`'s 
 
 Failure modes surface as wrapped sentinel errors: `errors.Is(err, pin.ErrFrozenDrift)`, `pin.ErrVerifyFailed`, `pin.ErrProvenanceMissing`, `pin.ErrPublisherMismatch`, `pin.ErrPathEscape`, `pin.ErrPathCollision`, `pin.ErrNoLockfile`.
 
-A worked example: [`examples/library-consumer/main.go`](examples/library-consumer/main.go).
-
 ## Framework integration
 
 The `assets` package imports only `lock` and the standard library, so any Go web framework that takes an `fs.FS` (or a directory) and any template engine that accepts `template.HTML` works without a framework-specific adapter.
@@ -262,8 +260,6 @@ afs, _ := assets.FS(vendored, lock)
 // framework's static-file handler. Render tags from your template with
 // assets.Tag(lock, "htmx.org", assets.Options{Prefix: "/vendor/"}).
 ```
-
-A worked Templ integration lives in [`examples/templ/`](examples/templ/).
 
 ## Embedding vendored bytes in the binary
 
