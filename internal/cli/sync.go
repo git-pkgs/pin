@@ -25,8 +25,9 @@ func newSyncCmd() *cobra.Command {
 	var jsonOut bool
 	var sigMode string
 	cmd := &cobra.Command{
-		Use:   "sync",
-		Short: "Resolve manifest, fetch assets, write lockfile",
+		Use:     "sync",
+		Aliases: []string{"install"},
+		Short:   "Resolve manifest, fetch assets, write lockfile",
 		Long: `Resolve pin.yaml against the registry, fetch the requested files,
 verify their integrity, and write pin.lock plus the vendored files under
 the manifest's out: directory.
