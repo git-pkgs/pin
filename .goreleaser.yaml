@@ -72,15 +72,3 @@ release:
     name: pin
   draft: false
   prerelease: auto
-
-homebrew_casks:
-  - name: pin
-    description: Browser asset vendoring without npm
-    homepage: https://github.com/git-pkgs/pin
-    repository:
-      owner: git-pkgs
-      name: homebrew-git-pkgs
-    directory: Casks
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
