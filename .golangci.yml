@@ -16,6 +16,9 @@ linters:
     - ireturn
     - goconst
     - errcheck
+  settings:
+    goconst:
+      ignore-tests: true
   exclusions:
     rules:
       - path: _test\.go
