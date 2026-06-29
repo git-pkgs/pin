@@ -7,10 +7,10 @@ require (
 	github.com/git-pkgs/attestation v0.1.0
 	github.com/git-pkgs/cooldown v0.1.0
 	github.com/git-pkgs/purl v0.1.12
-	github.com/git-pkgs/registries v0.6.0
+	github.com/git-pkgs/registries v0.6.2
 	github.com/git-pkgs/sbom v0.1.2
 	github.com/git-pkgs/sigstore v0.1.0
-	github.com/git-pkgs/spdx v0.1.3
+	github.com/git-pkgs/spdx v0.1.4
 	github.com/git-pkgs/vers v0.2.6
 	github.com/sigstore/sigstore-go v1.1.4
 	github.com/spf13/cobra v1.10.2
@@ -90,7 +90,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.20 // indirect
-	github.com/github/go-spdx/v2 v2.6.0 // indirect
+	github.com/github/go-spdx/v2 v2.7.0 // indirect
 	github.com/go-critic/go-critic v0.14.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
