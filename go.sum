@@ -230,8 +230,8 @@ github.com/git-pkgs/archives v0.3.0 h1:iXKyO83jEFub1PGEDlHmk2tQ7XeV5LySTc0sEkH3x
 github.com/git-pkgs/archives v0.3.0/go.mod h1:LTJ1iQVFA7otizWMOyiI82NYVmyBWAPRzwu/e30rcXU=
 github.com/git-pkgs/attestation v0.1.0 h1:aj10Ls05zHWPL7114r0Se8RKC/w8tJgfnzh3dU1mAuM=
 github.com/git-pkgs/attestation v0.1.0/go.mod h1:NSctZpcwmxCiTQ6z3b4X6SCT2N7fQtuPXvizkRgPgBU=
-github.com/git-pkgs/cooldown v0.1.0 h1:I1vP12AhYeQK3USaPQt4MYQda4oHM3wsH2JQEvizTFo=
-github.com/git-pkgs/cooldown v0.1.0/go.mod h1:gZ6Zzi0JMRKTAy3LmCFA0AnO2OE/wEGNuR1BMn/ez0U=
+github.com/git-pkgs/cooldown v0.1.1 h1:9OqqzCB8gANz/y44SmqGD0Jp8Qtu81D1sCbKl6Ehg7w=
+github.com/git-pkgs/cooldown v0.1.1/go.mod h1:v7APuK/UouTiu8mWQZbdDmj7DfxxkGUeuhjaRB5gv9E=
 github.com/git-pkgs/pom v0.1.5 h1:TGT8Az2OMxGWsXnSagtUMGzZm7Oax8HrSCteA+mi0qY=
 github.com/git-pkgs/pom v0.1.5/go.mod h1:ufdMBe1lKzqOeP9IUb9NPZ458xKV8E8NvuyBMxOfwIk=
 github.com/git-pkgs/purl v0.1.12 h1:qCskrEU1LWQhCkIVZd992W5++Bsxazvx2Cx1/65qCvU=
