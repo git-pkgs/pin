@@ -6,7 +6,7 @@ require (
 	github.com/git-pkgs/archives v0.3.0
 	github.com/git-pkgs/attestation v0.1.0
 	github.com/git-pkgs/cooldown v0.1.1
-	github.com/git-pkgs/purl v0.1.12
+	github.com/git-pkgs/purl v0.1.13
 	github.com/git-pkgs/registries v0.6.2
 	github.com/git-pkgs/sbom v0.1.2
 	github.com/git-pkgs/sigstore v0.1.0
