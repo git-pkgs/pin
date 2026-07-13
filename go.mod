@@ -11,7 +11,7 @@ require (
 	github.com/git-pkgs/sbom v0.1.2
 	github.com/git-pkgs/sigstore v0.1.1
 	github.com/git-pkgs/spdx v0.1.4
-	github.com/git-pkgs/vers v0.2.6
+	github.com/git-pkgs/vers v0.3.0
 	github.com/sigstore/sigstore-go v1.2.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.21.0
