@@ -3,13 +3,13 @@ module github.com/git-pkgs/pin
 go 1.26.3
 
 require (
-	github.com/git-pkgs/archives v0.3.0
+	github.com/git-pkgs/archives v0.3.1
 	github.com/git-pkgs/attestation v0.1.0
 	github.com/git-pkgs/cooldown v0.1.1
 	github.com/git-pkgs/purl v0.1.15
-	github.com/git-pkgs/registries v0.6.3
+	github.com/git-pkgs/registries v0.6.4
 	github.com/git-pkgs/sbom v0.1.3
-	github.com/git-pkgs/sigstore v0.1.1
+	github.com/git-pkgs/sigstore v0.1.2
 	github.com/git-pkgs/spdx v0.1.4
 	github.com/git-pkgs/vers v0.3.0
 	github.com/sigstore/sigstore-go v1.2.2
@@ -249,7 +249,7 @@ require (
 	github.com/tommy-muehle/go-mnd/v2 v2.5.1 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
-	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/ulikunitz/xz v0.5.16 // indirect
 	github.com/ultraware/funlen v0.2.0 // indirect
 	github.com/ultraware/whitespace v0.2.0 // indirect
 	github.com/uudashr/gocognit v1.2.1 // indirect
