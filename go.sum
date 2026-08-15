@@ -232,8 +232,8 @@ github.com/git-pkgs/attestation v0.1.0 h1:aj10Ls05zHWPL7114r0Se8RKC/w8tJgfnzh3dU
 github.com/git-pkgs/attestation v0.1.0/go.mod h1:NSctZpcwmxCiTQ6z3b4X6SCT2N7fQtuPXvizkRgPgBU=
 github.com/git-pkgs/cooldown v0.1.1 h1:9OqqzCB8gANz/y44SmqGD0Jp8Qtu81D1sCbKl6Ehg7w=
 github.com/git-pkgs/cooldown v0.1.1/go.mod h1:v7APuK/UouTiu8mWQZbdDmj7DfxxkGUeuhjaRB5gv9E=
-github.com/git-pkgs/integrity v0.1.0 h1:ZLY5CmTVPQW4fMY4JDUdPFyevZc62xtkVPq71uw17Tw=
-github.com/git-pkgs/integrity v0.1.0/go.mod h1:hxu24lcd230377hCF28JQW7sGcCbuNLqo/0ULeb+F1Q=
+github.com/git-pkgs/integrity v0.1.1 h1:nHQ7SktOiGM1dOb5BFnkdtttG/6FCgE6r5ru6QnsGts=
+github.com/git-pkgs/integrity v0.1.1/go.mod h1:hxu24lcd230377hCF28JQW7sGcCbuNLqo/0ULeb+F1Q=
 github.com/git-pkgs/magic v0.1.0 h1:xLrqq7CMXB9g5bJnmJyKw17Rvlh0GFiEmO6e5RFsoeY=
 github.com/git-pkgs/magic v0.1.0/go.mod h1:3ndidt+yvFaI1M0aEkkzkOlFnLPkeVQASIUojazcxCI=
 github.com/git-pkgs/pom v0.1.5 h1:TGT8Az2OMxGWsXnSagtUMGzZm7Oax8HrSCteA+mi0qY=
