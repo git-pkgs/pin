@@ -171,7 +171,7 @@ assets:
 
 ## Lockfile
 
-`pin.lock` is a valid CycloneDX 1.6 SBOM. Each package becomes a `library` component with the registry tarball hash; each vendored file becomes a nested `file` component with its own SHA-384, the CDN URL, and pin-specific metadata under a `pin:` property namespace. Any CycloneDX consumer (Dependency-Track, GUAC, OSV-scanner, `git-pkgs sbom`) reads it directly. `serialNumber` and `metadata.timestamp` are deliberately omitted so re-runs are byte-stable and parallel branches don't conflict on the file.
+`pin.lock` is a valid CycloneDX 1.6 SBOM. Each package becomes a `library` component with the registry tarball hashes; each vendored file becomes a nested `file` component with its integrity hashes, the CDN URL, and pin-specific metadata under a `pin:` property namespace. New file entries use SHA-384. Any CycloneDX consumer (Dependency-Track, GUAC, OSV-scanner, `git-pkgs sbom`) reads it directly. `serialNumber` and `metadata.timestamp` are deliberately omitted so re-runs are byte-stable and parallel branches don't conflict on the file.
 
 The schema is in [docs/SPEC.md](docs/SPEC.md), the defences in [docs/SECURITY.md](docs/SECURITY.md), and the adversary-by-asset model in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
@@ -215,7 +215,7 @@ Source resolvers are pluggable by purl type. Register a new resolver for any pre
 c.RegisterResolver("ipfs", myIPFSResolver{})
 ```
 
-The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `pinfs`, `integrity`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`), and `assets` sub-packages are all public.
+The full Client surface: `Sync`, `Verify`, `Outdated`, `Add`, `Remove`, plus the package-level `List`, `Path`, `Init`, `SBOM`, `EncodeLock`. The `manifest`, `lock`, `pinfs`, `cdn`, `sniff`, `source` (with `source/npm`, `source/forge`, `source/rawurl`), and `assets` sub-packages are all public.
 
 `SyncOptions.FS` redirects pin's outputs (vendored files + `pin.lock`) into anything that implements `pinfs.Writer`. The default writes to local paths under `SyncOptions.Dir`; `pinfs.NewMemory()` keeps everything in process, and a custom implementation can pipe writes into a tarball, an archive, or an in-memory build artefact.
 

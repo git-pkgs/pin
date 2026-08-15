@@ -96,12 +96,14 @@ order is stable and a writer MUST produce it; a reader MAY rely on it.
 
 - `bom-ref` equals `purl`. Both fields exist for CycloneDX consumers
   that key by either.
-- `hashes[0]` is the package-level integrity anchor. Encoding depends
-  on the source kind, summarised below:
+- `hashes[]` contains the package-level integrity anchors. npm metadata may
+  contain several supported SRI digests; pin preserves each SHA-256, SHA-384,
+  and SHA-512 entry in source order. Other source kinds use one entry. Encoding
+  depends on the source kind, summarised below:
 
-  | Source            | purl prefix     | `hashes[0].alg`          | `hashes[0].content`                            |
+  | Source            | purl prefix     | `hashes[].alg`            | `hashes[].content`                              |
   |-------------------|-----------------|--------------------------|------------------------------------------------|
-  | npm               | `pkg:npm/`      | `SHA-512` (or the algorithm in `dist.integrity`) | hex of the registry tarball                     |
+  | npm               | `pkg:npm/`      | each supported algorithm in `dist.integrity` | hex of the registry tarball                     |
   | github            | `pkg:github/`   | `SHA-1`                  | hex of the resolved commit SHA                  |
   | url (TOFU)        | `pkg:generic/`  | `SHA-384`                | hex of the single fetched file                  |
 
@@ -145,11 +147,11 @@ commit SHA; writers MUST write both.
   identifying the file inside the package.
 - `name` is the file's path inside the package (the source-of-record path,
   not the on-disk output path).
-- `hashes[0]` is the Subresource Integrity hash of the file's bytes,
-  encoded as hex per CycloneDX convention. SHA-384 is the default
-  algorithm chosen because it's what browsers accept in
-  `<script integrity>` attributes and what jsdelivr publishes natively.
-  Convert hex to base64 to produce an `sha384-...` SRI string.
+- `hashes[]` contains the Subresource Integrity digests of the file's bytes,
+  encoded as hex per CycloneDX convention. Readers preserve supported entries
+  in their original order. New file entries use SHA-384 because browsers accept
+  it in `<script integrity>` attributes and jsdelivr publishes it natively.
+  Convert each hex value to base64 to produce an SRI metadata list.
 - `externalReferences[type=distribution]` is the CDN URL where the file
   can be fetched. Recording it as transport metadata; integrity is
   anchored to the package, not the CDN.
