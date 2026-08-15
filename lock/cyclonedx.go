@@ -2,10 +2,11 @@ package lock
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strconv"
 
-	"github.com/git-pkgs/pin/integrity"
+	"github.com/git-pkgs/integrity"
 )
 
 const (
@@ -152,8 +153,8 @@ func packageComponent(purl string, assets []Asset) cdxComponent {
 		Version: first.Version,
 		PURL:    purl,
 	}
-	if h := encodePackageHash(first.PackageIntegrity); h != nil {
-		c.Hashes = []cdxHash{*h}
+	if hashes := encodePackageHashes(first.PackageIntegrity); len(hashes) > 0 {
+		c.Hashes = hashes
 	}
 	if first.License != "" {
 		c.Licenses = []cdxLicense{{License: cdxLicenseID{ID: first.License}}}
@@ -224,8 +225,8 @@ func fileComponent(parentPURL string, a Asset) cdxComponent {
 		Name:   a.Path,
 	}
 	if a.Integrity != "" {
-		if alg, hex, err := integrity.ParseSRI(a.Integrity); err == nil {
-			c.Hashes = []cdxHash{{Alg: alg, Content: hex}}
+		if hashes := encodeSRIHashes(a.Integrity); len(hashes) > 0 {
+			c.Hashes = hashes
 		}
 	}
 	if a.URL != "" {
@@ -252,9 +253,9 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 		OutDir:          findProp(bom.Metadata.Properties, propOutDir),
 	}
 	for _, pkg := range bom.Components {
-		var pkgIntegrity string
-		if len(pkg.Hashes) > 0 {
-			pkgIntegrity = decodePackageHash(pkg.Hashes[0])
+		pkgIntegrity, err := decodePackageHashes(pkg.Hashes)
+		if err != nil {
+			return nil, fmt.Errorf("package %q integrity: %w", pkg.Name, err)
 		}
 		var license string
 		if len(pkg.Licenses) > 0 {
@@ -277,11 +278,11 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 				Format:           findProp(file.Properties, propFormat),
 				URL:              findExtRef(file.ExternalReferences, "distribution"),
 			}
-			if len(file.Hashes) > 0 {
-				if sri, err := integrity.FormatSRI(file.Hashes[0].Alg, file.Hashes[0].Content); err == nil {
-					a.Integrity = sri
-				}
+			fileIntegrity, err := decodeSRIHashes(file.Hashes)
+			if err != nil {
+				return nil, fmt.Errorf("file %q integrity: %w", file.Name, err)
 			}
+			a.Integrity = fileIntegrity
 			if s := findProp(file.Properties, propSize); s != "" {
 				a.Size, _ = strconv.ParseInt(s, 10, 64)
 			}
@@ -291,32 +292,102 @@ func fromCDX(bom *cdxBOM) (*Lock, error) {
 	return l, nil
 }
 
-// encodePackageHash converts an Asset.PackageIntegrity (either an SRI string
-// from npm or a bare commit SHA from a forge source) into a CycloneDX hash
-// entry. Forge SHAs are emitted as SHA-1; npm SRI is decoded to hex.
-func encodePackageHash(pkgIntegrity string) *cdxHash {
+func encodeSRIHashes(value string) []cdxHash {
+	digests, err := integrity.ParseSRI(value)
+	if err != nil {
+		return nil
+	}
+	hashes := make([]cdxHash, 0, len(digests))
+	for _, digest := range digests {
+		hashes = append(hashes, cdxHash{
+			Alg:     cdxAlgorithm(digest.Algorithm()),
+			Content: digest.Hex(),
+		})
+	}
+	return hashes
+}
+
+func decodeSRIHashes(hashes []cdxHash) (string, error) {
+	digests := make(integrity.SRI, 0, len(hashes))
+	for _, hash := range hashes {
+		algorithm, ok := sriAlgorithm(hash.Alg)
+		if !ok {
+			continue
+		}
+		digest, err := integrity.ParseHex(algorithm, hash.Content)
+		if err != nil {
+			return "", fmt.Errorf("invalid %s digest: %w", hash.Alg, err)
+		}
+		digests = append(digests, digest)
+	}
+	return integrity.FormatSRI(digests), nil
+}
+
+func cdxAlgorithm(algorithm integrity.Algorithm) string {
+	switch algorithm {
+	case integrity.SHA256:
+		return "SHA-256"
+	case integrity.SHA384:
+		return "SHA-384"
+	case integrity.SHA512:
+		return "SHA-512"
+	default:
+		return ""
+	}
+}
+
+func sriAlgorithm(algorithm string) (integrity.Algorithm, bool) {
+	switch algorithm {
+	case "SHA-256":
+		return integrity.SHA256, true
+	case "SHA-384":
+		return integrity.SHA384, true
+	case "SHA-512":
+		return integrity.SHA512, true
+	default:
+		return 0, false
+	}
+}
+
+// encodePackageHashes converts Asset.PackageIntegrity, either an SRI metadata
+// list from npm or a bare commit SHA from a forge source, into CycloneDX hash
+// entries. Forge SHAs remain SHA-1 values local to pin.
+func encodePackageHashes(pkgIntegrity string) []cdxHash {
 	if pkgIntegrity == "" {
 		return nil
 	}
-	if alg, hex, err := integrity.ParseSRI(pkgIntegrity); err == nil {
-		return &cdxHash{Alg: alg, Content: hex}
+	if hashes := encodeSRIHashes(pkgIntegrity); len(hashes) > 0 {
+		return hashes
 	}
 	if isCommitSHA(pkgIntegrity) {
-		return &cdxHash{Alg: "SHA-1", Content: pkgIntegrity}
+		return []cdxHash{{Alg: "SHA-1", Content: pkgIntegrity}}
 	}
 	return nil
 }
 
-// decodePackageHash is the inverse of encodePackageHash. SHA-1 entries pass
-// through as bare hex (forge commit SHAs); everything else round-trips via SRI.
-func decodePackageHash(h cdxHash) string {
-	if h.Alg == "SHA-1" && isCommitSHA(h.Content) {
-		return h.Content
+// decodePackageHashes is the inverse of encodePackageHashes. SHA-1 entries
+// remain bare commit values, while supported SRI digests stay in list order.
+func decodePackageHashes(hashes []cdxHash) (string, error) {
+	var commitSHA string
+	var sriHashes []cdxHash
+	for _, hash := range hashes {
+		if hash.Alg == "SHA-1" {
+			if !isCommitSHA(hash.Content) {
+				return "", fmt.Errorf("invalid SHA-1 commit digest %q", hash.Content)
+			}
+			if commitSHA == "" {
+				commitSHA = hash.Content
+			}
+			continue
+		}
+		if _, ok := sriAlgorithm(hash.Alg); ok {
+			sriHashes = append(sriHashes, hash)
+		}
 	}
-	if sri, err := integrity.FormatSRI(h.Alg, h.Content); err == nil {
-		return sri
+	if len(sriHashes) > 0 {
+		return decodeSRIHashes(sriHashes)
 	}
-	return ""
+	return commitSHA, nil
 }
 
 func isCommitSHA(s string) bool {

@@ -50,3 +50,17 @@ func TestSRIRoundTrip(t *testing.T) {
 		t.Errorf("round-trip: %q != %q", out, in)
 	}
 }
+
+func TestParseSRIMultipleReturnsFirstDigest(t *testing.T) {
+	input := "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU= sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg=="
+	algorithm, digest, err := ParseSRI(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if algorithm != CDXSHA256 {
+		t.Errorf("algorithm = %q, want %q", algorithm, CDXSHA256)
+	}
+	if digest != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+		t.Errorf("digest = %q", digest)
+	}
+}
