@@ -1,9 +1,8 @@
 package pin
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha512"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/git-pkgs/integrity"
 	"github.com/git-pkgs/pin/lock"
 	"github.com/git-pkgs/pin/source/npm"
 	"github.com/git-pkgs/purl"
@@ -74,7 +74,7 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 	for _, a := range l.Assets {
 		known[a.Out] = true
 		p := filepath.Join(opts.Dir, l.OutDir, filepath.FromSlash(a.Out))
-		got, err := hashFile(p)
+		got, matches, err := verifyFile(p, a.Integrity)
 		if errors.Is(err, fs.ErrNotExist) {
 			res.Missing = append(res.Missing, a.Out)
 			continue
@@ -82,7 +82,7 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("hash %s: %w", a.Out, err)
 		}
-		if got != a.Integrity {
+		if !matches {
 			res.Drifted = append(res.Drifted, Drift{Out: a.Out, Expected: a.Integrity, Actual: got})
 			continue
 		}
@@ -110,9 +110,9 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 }
 
 // verifyStrictNPM re-fetches each npm tarball, re-extracts the
-// lockfile's claimed files, and compares the derived per-file
-// SHA-384 to the recorded integrity. forge and url sources are
-// skipped because their per-file SHA-384 already IS the anchor.
+// lockfile's claimed files, and verifies their bytes against the
+// recorded integrity. forge and url sources are skipped because
+// their per-file hashes already are the anchor.
 func (c *Client) verifyStrictNPM(l *lock.Lock) ([]Drift, error) {
 	src := c.NPM
 
@@ -145,17 +145,21 @@ func (c *Client) verifyStrictNPM(l *lock.Lock) ([]Drift, error) {
 		if err != nil {
 			return nil, fmt.Errorf("re-derive %s: %w", key, err)
 		}
-		derived := map[string]string{}
+		derived := map[string][]byte{}
 		for _, f := range resolved.Files {
-			derived[f.Path] = f.Integrity
+			derived[f.Path] = f.Content
 		}
 		for _, a := range assets {
-			got, ok := derived[a.Path]
+			content, ok := derived[a.Path]
 			if !ok {
 				drifts = append(drifts, Drift{Out: a.Out, Expected: a.Integrity, Actual: "<not in tarball>"})
 				continue
 			}
-			if got != a.Integrity {
+			got, matches, err := verifyIntegrity(bytes.NewReader(content), a.Integrity)
+			if err != nil {
+				return nil, fmt.Errorf("verify %s integrity: %w", a.Path, err)
+			}
+			if !matches {
 				drifts = append(drifts, Drift{Out: a.Out, Expected: a.Integrity, Actual: got})
 			}
 		}
@@ -163,17 +167,41 @@ func (c *Client) verifyStrictNPM(l *lock.Lock) ([]Drift, error) {
 	return drifts, nil
 }
 
-func hashFile(path string) (string, error) {
+func verifyFile(path, expected string) (string, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer func() { _ = f.Close() }()
-	h := sha512.New384()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	return verifyIntegrity(f, expected)
+}
+
+func verifyIntegrity(source io.Reader, expectedValue string) (string, bool, error) {
+	var expected integrity.SRI
+	algorithms := []integrity.Algorithm{integrity.SHA384}
+	if expectedValue != "" {
+		var err error
+		expected, err = integrity.ParseSRI(expectedValue)
+		if err != nil {
+			return "", false, fmt.Errorf("parse expected integrity: %w", err)
+		}
+		algorithms = algorithms[:0]
+		for _, digest := range expected {
+			algorithms = append(algorithms, digest.Algorithm())
+		}
 	}
-	return "sha384-" + base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
+
+	reader, err := integrity.NewReader(source, algorithms...)
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		return "", false, err
+	}
+	result := reader.Result()
+	actual := integrity.FormatSRI(result.Digests)
+	matches := len(expected) > 0 && result.Verify(expected) == nil
+	return actual, matches, nil
 }
 
 func findExtras(root string, known map[string]bool) ([]string, error) {

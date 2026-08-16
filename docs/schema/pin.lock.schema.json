@@ -75,7 +75,7 @@
         },
         "hashes": {
           "type": "array",
-          "description": "Package-level integrity anchor. SHA-512 for npm (tarball hash); SHA-1 for github (commit SHA, hex); SHA-384 for url (per-file TOFU).",
+          "description": "Package-level integrity anchors. npm may carry multiple SHA-256, SHA-384, or SHA-512 tarball hashes; github uses SHA-1 for the commit; url uses SHA-384 for per-file TOFU.",
           "items": { "$ref": "#/$defs/hash" }
         },
         "licenses": {
@@ -127,7 +127,7 @@
         "hashes": {
           "type": "array",
           "minItems": 1,
-          "description": "Per-file Subresource Integrity hash, hex-encoded. SHA-384 by default.",
+          "description": "Per-file Subresource Integrity hashes, hex-encoded. New entries use SHA-384 by default.",
           "items": { "$ref": "#/$defs/hash" }
         },
         "externalReferences": {

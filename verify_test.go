@@ -2,6 +2,9 @@ package pin
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,6 +43,18 @@ func TestVerifyClean(t *testing.T) {
 	}
 	if len(res.Extra) != 0 {
 		t.Errorf("Extra = %v", res.Extra)
+	}
+}
+
+func TestVerifyMultiHash(t *testing.T) {
+	dir, _ := setupSynced(t)
+	addMultiHashIntegrity(t, dir)
+	res, err := Verify(VerifyOptions{Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed() {
+		t.Errorf("clean multi-hash verify failed: %+v", res)
 	}
 }
 
@@ -109,7 +124,7 @@ func TestVerifyNoLockfile(t *testing.T) {
 
 // TestVerifyStrict exercises the --strict re-derive path: the inner
 // verifyStrictNPM that re-fetches each npm package's tarball and
-// recomputes per-file SHA-384 against the lockfile-recorded integrity.
+// verifies each file against the lockfile-recorded integrity.
 func TestVerifyStrict(t *testing.T) {
 	dir, srvURL := setupSynced(t)
 	res, err := Verify(VerifyOptions{Dir: dir, Strict: true, RegistryURL: srvURL})
@@ -118,6 +133,26 @@ func TestVerifyStrict(t *testing.T) {
 	}
 	if res.Failed() {
 		t.Errorf("clean --strict verify failed: %+v", res)
+	}
+}
+
+func TestVerifyStrictMultiHash(t *testing.T) {
+	dir, srvURL := setupSynced(t)
+	addMultiHashIntegrity(t, dir)
+	res, err := Verify(VerifyOptions{Dir: dir, Strict: true, RegistryURL: srvURL})
+	if err != nil {
+		t.Fatalf("Verify --strict: %v", err)
+	}
+	if res.Failed() {
+		t.Errorf("clean multi-hash --strict verify failed: %+v", res)
+	}
+}
+
+func TestSyncNoFetchMultiHash(t *testing.T) {
+	dir, _ := setupSynced(t)
+	addMultiHashIntegrity(t, dir)
+	if _, err := Sync(context.Background(), SyncOptions{Dir: dir, NoFetch: true}); err != nil {
+		t.Errorf("--no-fetch on clean multi-hash tree: %v", err)
 	}
 }
 
@@ -154,5 +189,30 @@ func TestVerifySummary(t *testing.T) {
 	want := "2 ok, 1 missing, 1 drifted, 2 extra"
 	if got != want {
 		t.Errorf("Summary() = %q, want %q", got, want)
+	}
+}
+
+func addMultiHashIntegrity(t *testing.T, dir string) {
+	t.Helper()
+	l, err := readLock(filepath.Join(dir, DefaultLock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, asset := range l.Assets {
+		content, err := os.ReadFile(filepath.Join(dir, l.OutDir, asset.Out))
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest256 := sha256.Sum256(content)
+		digest512 := sha512.Sum512(content)
+		l.Assets[i].Integrity = "sha256-" + base64.StdEncoding.EncodeToString(digest256[:]) + " " +
+			asset.Integrity + " sha512-" + base64.StdEncoding.EncodeToString(digest512[:])
+	}
+	encoded, err := EncodeLock(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, DefaultLock), encoded, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
