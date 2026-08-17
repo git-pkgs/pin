@@ -60,7 +60,7 @@ func attestationServer(t *testing.T, expectDigest [32]byte, bundleBody []byte, c
 	t.Helper()
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/repos/o/r/commits/v1", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"sha": sha})
+		_, _ = w.Write([]byte(sha))
 	})
 	apiMux.HandleFunc("/repos/o/r/attestations/sha256:"+hex.EncodeToString(expectDigest[:]),
 		func(w http.ResponseWriter, _ *http.Request) {

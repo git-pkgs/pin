@@ -396,8 +396,11 @@ assets:
 func fakeGitHub(t *testing.T, owner, repo, tag, sha string, files map[string]string) (api, cdn string) {
 	t.Helper()
 	apiMux := http.NewServeMux()
-	apiMux.HandleFunc("/repos/"+owner+"/"+repo+"/commits/"+tag, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"sha": sha})
+	apiMux.HandleFunc("/repos/"+owner+"/"+repo+"/commits/"+tag, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); !strings.HasPrefix(got, "pin/") {
+			t.Errorf("User-Agent = %q, want pin version", got)
+		}
+		_, _ = w.Write([]byte(sha))
 	})
 	apiSrv := httptest.NewServer(apiMux)
 	t.Cleanup(apiSrv.Close)

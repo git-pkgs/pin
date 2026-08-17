@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/git-pkgs/attestation"
+	githubforge "github.com/git-pkgs/forge/github"
 	"github.com/git-pkgs/purl"
 	"golang.org/x/sync/errgroup"
 )
@@ -18,12 +20,22 @@ import (
 // connections.
 const forgeFileConcurrency = 4
 
-const fullSHALen = 40
-
 type fileFetch struct {
 	rf     ResolvedFile
 	att    *Attestation
 	attRaw []byte
+}
+
+type userAgentTransport struct {
+	base      http.RoundTripper
+	userAgent string
+}
+
+func (t userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header = req.Header.Clone()
+	clone.Header.Set("User-Agent", t.userAgent)
+	return t.base.RoundTrip(clone)
 }
 
 func (s *Source) resolveGitHub(ctx context.Context, p *purl.PURL, files []string) (*Resolved, error) {
@@ -133,27 +145,16 @@ func (s *Source) fetchGitHubAttestation(ctx context.Context, owner, repo string,
 }
 
 func (s *Source) githubResolveSHA(ctx context.Context, owner, repo, ref string) (string, error) {
-	if len(ref) == fullSHALen && isHex(ref) {
-		return ref, nil
+	httpClient := *s.http.HTTPClient
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
 	}
-	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s", strings.TrimRight(s.opts.GitHubAPI, "/"), owner, repo, ref)
-	var resp struct {
-		SHA string `json:"sha"`
-	}
-	if err := s.http.GetJSON(ctx, url, &resp); err != nil {
-		return "", fmt.Errorf("resolve %s/%s ref %q to commit: %w", owner, repo, ref, err)
-	}
-	if resp.SHA == "" {
-		return "", fmt.Errorf("resolve %s/%s ref %q: empty SHA in response", owner, repo, ref)
-	}
-	return resp.SHA, nil
-}
+	httpClient.Transport = userAgentTransport{base: transport, userAgent: s.http.UserAgent}
 
-func isHex(s string) bool {
-	for _, c := range s {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
-			return false
-		}
+	resolver, err := githubforge.NewCommitResolverWithBase(s.opts.GitHubAPI, "", &httpClient)
+	if err != nil {
+		return "", fmt.Errorf("create GitHub commit resolver: %w", err)
 	}
-	return true
+	return resolver.ResolveCommit(ctx, owner, repo, ref)
 }

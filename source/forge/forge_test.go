@@ -2,7 +2,6 @@ package forge
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,7 +14,7 @@ func fakeGitHub(t *testing.T, owner, repo, tag, sha string, files map[string]str
 	t.Helper()
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/repos/"+owner+"/"+repo+"/commits/"+tag, func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"sha": sha})
+		_, _ = w.Write([]byte(sha))
 	})
 	apiSrv := httptest.NewServer(apiMux)
 	t.Cleanup(apiSrv.Close)
@@ -147,14 +146,5 @@ func TestResolveUnsupportedForge(t *testing.T) {
 	src := New(Options{})
 	if _, err := src.Resolve(context.Background(), purl.New("gitlab", "o", "r", "v1", nil), []string{"x"}); err == nil {
 		t.Fatal("expected error for unsupported forge type")
-	}
-}
-
-func TestIsHex(t *testing.T) {
-	if !isHex("abc123DEF") {
-		t.Error("hex string not recognised")
-	}
-	if isHex("ghijk") {
-		t.Error("non-hex accepted")
 	}
 }
