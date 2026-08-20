@@ -2,6 +2,8 @@ module github.com/git-pkgs/pin
 
 go 1.26.3
 
+toolchain go1.26.6
+
 require (
 	github.com/git-pkgs/archives v0.5.1
 	github.com/git-pkgs/attestation v0.1.0
