@@ -10,12 +10,12 @@ require (
 	github.com/git-pkgs/cooldown v0.1.1
 	github.com/git-pkgs/forge v0.9.0
 	github.com/git-pkgs/integrity v0.1.1
-	github.com/git-pkgs/purl v0.1.16
+	github.com/git-pkgs/purl v0.1.19
 	github.com/git-pkgs/registries v0.7.0
 	github.com/git-pkgs/sbom v0.1.5
 	github.com/git-pkgs/sigstore v0.1.2
 	github.com/git-pkgs/spdx v0.3.1
-	github.com/git-pkgs/vers v0.3.1
+	github.com/git-pkgs/vers v0.6.0
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.22.0
@@ -202,7 +202,7 @@ require (
 	github.com/nunnatsa/ginkgolinter v0.23.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/package-url/packageurl-go v0.1.6 // indirect
+	github.com/package-url/packageurl-go v0.1.7 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
