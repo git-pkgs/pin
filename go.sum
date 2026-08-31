@@ -246,8 +246,8 @@ github.com/git-pkgs/registries v0.7.0 h1:+LbOOMHbvjmXGfsi88hcGH+SfTXYsXA3UY5KYI5
 github.com/git-pkgs/registries v0.7.0/go.mod h1:VCD4q+ZW0fInopzseg9rAmBEL553R2JQe60UHXtv26w=
 github.com/git-pkgs/sbom v0.1.6 h1:bHgk58NmpDZVNFe+6+kTEigrCaYkmpLjjDl8V0X9+RA=
 github.com/git-pkgs/sbom v0.1.6/go.mod h1:CHxXSiOfsMRzF7SfvlTlZ2xhJE+NbZ/GK/lFuEYGC3U=
-github.com/git-pkgs/sigstore v0.1.2 h1:NEBYjDMQyUplloSGJHBwy2c0AFVlrl/0JolRHE55Gvo=
-github.com/git-pkgs/sigstore v0.1.2/go.mod h1:t4e7ovHPP2Ml1lCxAu87Lr0/zQaJsuXnF0c2Cpty+lc=
+github.com/git-pkgs/sigstore v0.2.0 h1:PYDIMmw6vyGuHdOevJODfBLvQwQyxqGHpnkckdMmGOQ=
+github.com/git-pkgs/sigstore v0.2.0/go.mod h1:Oj52BXfyZ0zwWqyBYtHIV8hq9/2wMdI8Fek5o0w1ccc=
 github.com/git-pkgs/spdx v0.3.1 h1:58JPY5X9pYpXvnzzZIgehItlBykeOOw52pNc4OBcS+c=
 github.com/git-pkgs/spdx v0.3.1/go.mod h1:cqRoZcvl530s/W+oGNvwjt4ODN8T1W6D/20MUZEFdto=
 github.com/git-pkgs/vers v0.6.0 h1:droJw8+oSyl8/UoDj/96B9ZPggmxJDTl/JeixzfKzSc=
@@ -898,8 +898,8 @@ google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68 h1:
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=
 google.golang.org/grpc v1.82.1 h1:NnAxzGRA0677vCa4BUkOAnO5+FfQqVl9iUXeD0IqcGE=
 google.golang.org/grpc v1.82.1/go.mod h1:yzTZ1TB1Z3SG+LIYaI+WiE8D5+PZ3ArnrSp8zF3+/ZA=
-google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
-google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
+google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
+google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
