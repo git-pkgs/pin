@@ -1,8 +1,6 @@
 module github.com/git-pkgs/pin
 
-go 1.26.3
-
-toolchain go1.26.6
+go 1.26.7
 
 require (
 	github.com/git-pkgs/archives v0.5.1
@@ -12,7 +10,7 @@ require (
 	github.com/git-pkgs/integrity v0.1.1
 	github.com/git-pkgs/purl v0.1.19
 	github.com/git-pkgs/registries v0.7.0
-	github.com/git-pkgs/sbom v0.1.5
+	github.com/git-pkgs/sbom v0.1.6
 	github.com/git-pkgs/sigstore v0.1.2
 	github.com/git-pkgs/spdx v0.3.1
 	github.com/git-pkgs/vers v0.6.0
