@@ -11,7 +11,7 @@ require (
 	github.com/git-pkgs/purl v0.1.19
 	github.com/git-pkgs/registries v0.7.0
 	github.com/git-pkgs/sbom v0.1.6
-	github.com/git-pkgs/sigstore v0.1.2
+	github.com/git-pkgs/sigstore v0.2.0
 	github.com/git-pkgs/spdx v0.3.1
 	github.com/git-pkgs/vers v0.6.0
 	github.com/sigstore/sigstore-go v1.3.0
@@ -291,7 +291,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68 // indirect
 	google.golang.org/grpc v1.82.1 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	mvdan.cc/gofumpt v0.9.2 // indirect
