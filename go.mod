@@ -9,7 +9,7 @@ require (
 	github.com/git-pkgs/forge v0.9.0
 	github.com/git-pkgs/integrity v0.1.1
 	github.com/git-pkgs/purl v0.1.19
-	github.com/git-pkgs/registries v0.7.0
+	github.com/git-pkgs/registries v0.9.0
 	github.com/git-pkgs/sbom v0.1.6
 	github.com/git-pkgs/sigstore v0.2.0
 	github.com/git-pkgs/spdx v0.3.1
@@ -279,7 +279,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/mod v0.38.0 // indirect
