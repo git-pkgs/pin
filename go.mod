@@ -12,7 +12,7 @@ require (
 	github.com/git-pkgs/registries v0.9.1
 	github.com/git-pkgs/sbom v0.1.6
 	github.com/git-pkgs/sigstore v0.2.1
-	github.com/git-pkgs/spdx v0.3.1
+	github.com/git-pkgs/spdx v0.3.2
 	github.com/git-pkgs/vers v0.7.0
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/spf13/cobra v1.10.2
