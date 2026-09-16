@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -37,6 +38,15 @@ const (
 // ToolVersion is overridden at build time via the
 // `-X github.com/git-pkgs/pin.ToolVersion=X.Y.Z` ldflag.
 var ToolVersion = "dev"
+
+func init() {
+	if ToolVersion != "dev" {
+		return
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		ToolVersion = bi.Main.Version
+	}
+}
 
 // SyncOptions configures pin.Sync / Client.Sync. RegistryURL, Forge,
 // SignatureMode, and VerifyProvenance are honoured by the top-level
