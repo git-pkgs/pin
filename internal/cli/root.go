@@ -1,10 +1,21 @@
 package cli
 
 import (
+	"runtime/debug"
+
 	"github.com/spf13/cobra"
 )
 
 var version = "dev"
+
+func init() {
+	if version != "dev" {
+		return
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		version = bi.Main.Version
+	}
+}
 
 func Root() *cobra.Command {
 	root := &cobra.Command{
