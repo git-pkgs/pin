@@ -191,6 +191,10 @@ For each vendored script, `pin` detects the module format (`esm`, `umd`, `iife`,
 
 ## As a Go library
 
+```sh
+go get github.com/git-pkgs/pin
+```
+
 For one-shot scripts, the package-level functions take the same options the CLI flags wrap (the CLI is itself a thin shim over them):
 
 ```go
@@ -291,4 +295,4 @@ The `pinfs.Writer` interface and the `source.Resolver` interface are stable in s
 
 ## License
 
-MIT
+[MIT](LICENSE).
