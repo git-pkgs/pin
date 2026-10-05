@@ -8,7 +8,7 @@ require (
 	github.com/git-pkgs/cooldown v0.2.0
 	github.com/git-pkgs/forge v0.10.0
 	github.com/git-pkgs/integrity v0.1.1
-	github.com/git-pkgs/purl v0.1.20
+	github.com/git-pkgs/purl v0.1.21
 	github.com/git-pkgs/registries v0.9.2
 	github.com/git-pkgs/sbom v0.1.6
 	github.com/git-pkgs/sigstore v0.2.1
