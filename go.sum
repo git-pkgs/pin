@@ -92,8 +92,8 @@ github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 h1:lxmTCgmHE1G
 github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7/go.mod h1:GvWntX9qiTlOud0WkQ6ewFm0LPy5JUR1Xo0Ngbd1w6Y=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/git-pkgs/archives v0.7.1 h1:xLGYZkezsukkSXwJN1tAC0oxSe3szTw8PPtILDSHmG8=
-github.com/git-pkgs/archives v0.7.1/go.mod h1:vnRwCQ4eZ87tFzMiQ3GVIrOW6igJyog+2ad5YYCC3xQ=
+github.com/git-pkgs/archives v0.8.0 h1:dCrJbSx64c3XBkEHJfr+td2klcuXIOEAnYdntbpOUCY=
+github.com/git-pkgs/archives v0.8.0/go.mod h1:vnRwCQ4eZ87tFzMiQ3GVIrOW6igJyog+2ad5YYCC3xQ=
 github.com/git-pkgs/attestation v0.1.0 h1:aj10Ls05zHWPL7114r0Se8RKC/w8tJgfnzh3dU1mAuM=
 github.com/git-pkgs/attestation v0.1.0/go.mod h1:NSctZpcwmxCiTQ6z3b4X6SCT2N7fQtuPXvizkRgPgBU=
 github.com/git-pkgs/cooldown v0.2.0 h1:0MWPHtkzZgvCR0wdiQeyvMea/dxgw9tParH1zzaFopc=
