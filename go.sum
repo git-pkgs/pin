@@ -100,8 +100,8 @@ github.com/git-pkgs/cooldown v0.2.0 h1:0MWPHtkzZgvCR0wdiQeyvMea/dxgw9tParH1zzaFo
 github.com/git-pkgs/cooldown v0.2.0/go.mod h1:v7APuK/UouTiu8mWQZbdDmj7DfxxkGUeuhjaRB5gv9E=
 github.com/git-pkgs/forge v0.10.1 h1:xuR5U63u7mo3uEDWZwwyr6pXnviejrss3D9He/eGD+M=
 github.com/git-pkgs/forge v0.10.1/go.mod h1:bVXtYNMFoXxIuN837/Ru5sJxDU7VlRWkl4X890vQCAU=
-github.com/git-pkgs/integrity v0.1.1 h1:nHQ7SktOiGM1dOb5BFnkdtttG/6FCgE6r5ru6QnsGts=
-github.com/git-pkgs/integrity v0.1.1/go.mod h1:hxu24lcd230377hCF28JQW7sGcCbuNLqo/0ULeb+F1Q=
+github.com/git-pkgs/integrity v0.2.0 h1:sxpAk7EUllZnTYttOoPTW/Yfe5J2imglpuJiuBUZOxM=
+github.com/git-pkgs/integrity v0.2.0/go.mod h1:vPLb2RB+hR/iCMIgqph0PZbQ7iktXDTK+uupoHQikKk=
 github.com/git-pkgs/magic v0.4.0 h1:oag0YiKuWOIIKWTKEjS47HYydGawUlfQiU96TwAqFyM=
 github.com/git-pkgs/magic v0.4.0/go.mod h1:SXOqcsNmbmpZjJZHEEWnwxprbsFvpwWgTAZrgXp4Jm4=
 github.com/git-pkgs/pom v0.1.7 h1:4yKdtw6eyShtjul6bcZdyz7yLQ+jdrYeYkKbskDGi4c=
