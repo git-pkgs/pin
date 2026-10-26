@@ -3,14 +3,14 @@ module github.com/git-pkgs/pin
 go 1.26.7
 
 require (
-	github.com/git-pkgs/archives v0.8.1
+	github.com/git-pkgs/archives v0.9.0
 	github.com/git-pkgs/attestation v0.1.0
-	github.com/git-pkgs/cooldown v0.2.0
+	github.com/git-pkgs/cooldown v0.3.0
 	github.com/git-pkgs/forge v0.10.1
-	github.com/git-pkgs/integrity v0.1.1
+	github.com/git-pkgs/integrity v0.2.0
 	github.com/git-pkgs/purl v0.1.21
-	github.com/git-pkgs/registries v0.9.3
-	github.com/git-pkgs/sbom v0.1.6
+	github.com/git-pkgs/registries v0.11.0
+	github.com/git-pkgs/sbom v0.1.7
 	github.com/git-pkgs/sigstore v0.2.1
 	github.com/git-pkgs/spdx v0.3.3
 	github.com/git-pkgs/vers v0.7.2
@@ -29,7 +29,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
-	github.com/git-pkgs/magic v0.4.0 // indirect
+	github.com/git-pkgs/magic v0.5.0 // indirect
 	github.com/github/go-spdx/v2 v2.7.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -66,7 +66,7 @@ require (
 	github.com/in-toto/attestation v1.2.0 // indirect
 	github.com/in-toto/in-toto-golang v0.11.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/compress v1.20.0 // indirect
+	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/package-url/packageurl-go v0.1.7 // indirect
@@ -83,7 +83,7 @@ require (
 	github.com/theupdateframework/go-tuf/v2 v2.4.2 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
-	github.com/ulikunitz/xz v0.5.16 // indirect
+	github.com/ulikunitz/xz v0.5.17 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
@@ -92,7 +92,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
