@@ -195,6 +195,9 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 	if err := checkOutCollisions(next.Assets); err != nil {
 		return nil, err
 	}
+	if err := enforceTrust(m, next, opts); err != nil {
+		return nil, err
+	}
 	if !opts.DryRun {
 		w, werr := writeAllFiles(fw, m.Out, results)
 		if werr != nil {
@@ -204,10 +207,6 @@ func (c *Client) Sync(ctx context.Context, opts SyncOptions) (*SyncResult, error
 	}
 
 	changes := lock.Diff(prev, next)
-
-	if err := enforceTrust(m, next, opts); err != nil {
-		return nil, err
-	}
 
 	var removed []string
 	if !opts.DryRun {
