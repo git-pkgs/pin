@@ -3,7 +3,7 @@ module github.com/git-pkgs/pin
 go 1.26.7
 
 require (
-	github.com/git-pkgs/archives v0.9.0
+	github.com/git-pkgs/archives v0.10.0
 	github.com/git-pkgs/attestation v0.1.0
 	github.com/git-pkgs/cooldown v0.3.0
 	github.com/git-pkgs/forge v0.10.1
