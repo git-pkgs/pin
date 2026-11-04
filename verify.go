@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -68,32 +69,10 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 		return nil, fmt.Errorf("%w at %s", ErrNoLockfile, filepath.Join(opts.Dir, opts.Lock))
 	}
 
-	res := &VerifyResult{}
-	known := map[string]bool{}
-
-	for _, a := range l.Assets {
-		known[a.Out] = true
-		p := filepath.Join(opts.Dir, l.OutDir, filepath.FromSlash(a.Out))
-		got, matches, err := verifyFile(p, a.Integrity)
-		if errors.Is(err, fs.ErrNotExist) {
-			res.Missing = append(res.Missing, a.Out)
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("hash %s: %w", a.Out, err)
-		}
-		if !matches {
-			res.Drifted = append(res.Drifted, Drift{Out: a.Out, Expected: a.Integrity, Actual: got})
-			continue
-		}
-		res.OK = append(res.OK, a.Out)
-	}
-
-	extra, err := findExtras(filepath.Join(opts.Dir, l.OutDir), known)
+	res, err := verifyLocalFiles(opts.Dir, l)
 	if err != nil {
 		return nil, err
 	}
-	res.Extra = extra
 
 	if opts.Strict {
 		drifts, err := c.verifyStrictNPM(l)
@@ -107,6 +86,58 @@ func (c *Client) Verify(opts VerifyOptions) (*VerifyResult, error) {
 	sort.Strings(res.Missing)
 	sort.Strings(res.Extra)
 	return res, nil
+}
+
+func verifyLocalFiles(dir string, l *lock.Lock) (*VerifyResult, error) {
+	outDir, err := filepath.Localize(path.Clean(l.OutDir))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid output directory %q", ErrPathEscape, l.OutDir)
+	}
+	for _, a := range l.Assets {
+		if _, err := filepath.Localize(a.Out); err != nil || a.Out == "." {
+			return nil, fmt.Errorf("%w: invalid asset path %q", ErrPathEscape, a.Out)
+		}
+	}
+
+	project, err := os.OpenRoot(filepath.Clean(dir))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = project.Close() }()
+
+	res := &VerifyResult{}
+	root, err := project.OpenRoot(outDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		for _, a := range l.Assets {
+			res.Missing = append(res.Missing, a.Out)
+		}
+		return res, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open output directory %q: %w", l.OutDir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	files := root.FS()
+	known := map[string]bool{}
+	for _, a := range l.Assets {
+		known[a.Out] = true
+		got, matches, err := verifyFile(files, a.Out, a.Integrity)
+		if errors.Is(err, fs.ErrNotExist) {
+			res.Missing = append(res.Missing, a.Out)
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("hash %s: %w", a.Out, err)
+		}
+		if !matches {
+			res.Drifted = append(res.Drifted, Drift{Out: a.Out, Expected: a.Integrity, Actual: got})
+			continue
+		}
+		res.OK = append(res.OK, a.Out)
+	}
+	res.Extra, err = findExtras(files, known)
+	return res, err
 }
 
 // verifyStrictNPM re-fetches each npm tarball, re-extracts the
@@ -167,8 +198,8 @@ func (c *Client) verifyStrictNPM(l *lock.Lock) ([]Drift, error) {
 	return drifts, nil
 }
 
-func verifyFile(path, expected string) (string, bool, error) {
-	f, err := os.Open(path)
+func verifyFile(files fs.FS, path, expected string) (string, bool, error) {
+	f, err := files.Open(path)
 	if err != nil {
 		return "", false, err
 	}
@@ -204,19 +235,17 @@ func verifyIntegrity(source io.Reader, expectedValue string) (string, bool, erro
 	return actual, matches, nil
 }
 
-func findExtras(root string, known map[string]bool) ([]string, error) {
+func findExtras(files fs.FS, known map[string]bool) ([]string, error) {
 	var extras []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(files, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		rel, _ := filepath.Rel(root, p)
-		rel = filepath.ToSlash(rel)
-		if strings.HasSuffix(rel, ".tmp") {
+		if strings.HasSuffix(p, ".tmp") {
 			return nil
 		}
-		if !known[rel] {
-			extras = append(extras, rel)
+		if !known[p] {
+			extras = append(extras, p)
 		}
 		return nil
 	})
