@@ -92,8 +92,8 @@ github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 h1:lxmTCgmHE1G
 github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7/go.mod h1:GvWntX9qiTlOud0WkQ6ewFm0LPy5JUR1Xo0Ngbd1w6Y=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/git-pkgs/archives v0.10.0 h1:/qgk0MI6VK2sKOoVTd0B4zs5hwTo+St0X8cYYftzumc=
-github.com/git-pkgs/archives v0.10.0/go.mod h1:GJ/h7NPTUYiPinOUxpYNsHFCUikYZcJXvugBvP1VGNc=
+github.com/git-pkgs/archives v0.10.1 h1:ulDxhjg9XJzvcMXKmuTf9XXjC2ydkZllz5VG/Krvo4o=
+github.com/git-pkgs/archives v0.10.1/go.mod h1:whtYzdsMLufW+aNoGcGSip/FC0NsiJhaqiZBxSe9AUc=
 github.com/git-pkgs/attestation v0.1.0 h1:aj10Ls05zHWPL7114r0Se8RKC/w8tJgfnzh3dU1mAuM=
 github.com/git-pkgs/attestation v0.1.0/go.mod h1:NSctZpcwmxCiTQ6z3b4X6SCT2N7fQtuPXvizkRgPgBU=
 github.com/git-pkgs/cooldown v0.3.0 h1:eAl2CQFwqXxluoVP9hHmropAf1VoV3gSxLMkN+NEu8A=
@@ -102,8 +102,8 @@ github.com/git-pkgs/forge v0.10.1 h1:xuR5U63u7mo3uEDWZwwyr6pXnviejrss3D9He/eGD+M
 github.com/git-pkgs/forge v0.10.1/go.mod h1:bVXtYNMFoXxIuN837/Ru5sJxDU7VlRWkl4X890vQCAU=
 github.com/git-pkgs/integrity v0.2.0 h1:sxpAk7EUllZnTYttOoPTW/Yfe5J2imglpuJiuBUZOxM=
 github.com/git-pkgs/integrity v0.2.0/go.mod h1:vPLb2RB+hR/iCMIgqph0PZbQ7iktXDTK+uupoHQikKk=
-github.com/git-pkgs/magic v0.5.0 h1:Pm+4fkHR+K6kg9pwJM4hnwWUuBlkYdLmF1yIAI8lU9Q=
-github.com/git-pkgs/magic v0.5.0/go.mod h1:SXOqcsNmbmpZjJZHEEWnwxprbsFvpwWgTAZrgXp4Jm4=
+github.com/git-pkgs/magic v0.6.0 h1:fINPe67FEIaFRVlZzhOIDClMkm+gftBroBENa8bHSxQ=
+github.com/git-pkgs/magic v0.6.0/go.mod h1:SXOqcsNmbmpZjJZHEEWnwxprbsFvpwWgTAZrgXp4Jm4=
 github.com/git-pkgs/pom v0.1.8 h1:mXCuWw6XkrKKZb6IurRZyIznYLPhV5AYg5ZO38Uj/l8=
 github.com/git-pkgs/pom v0.1.8/go.mod h1:sQBeYRzjCUn77fcABPn6I/a1aBHFxm55jTmkNxYtGtw=
 github.com/git-pkgs/purl v0.1.24 h1:JMEB1uNWI+baEpl6AeVx+Kfq1c+xkou+THxa5KJ3MrU=
