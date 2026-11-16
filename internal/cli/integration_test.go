@@ -301,6 +301,34 @@ assets:
 	if !strings.Contains(out, "CycloneDX") {
 		t.Errorf("sbom output is not CycloneDX: %s", out)
 	}
+	spdxOut, err := runCmd(t, "sbom", "-C", dir, "--format", "spdx")
+	if err != nil {
+		t.Fatalf("sbom --format spdx: %v", err)
+	}
+	var doc struct {
+		Packages []struct {
+			Name         string `json:"name"`
+			Version      string `json:"versionInfo"`
+			ExternalRefs []struct {
+				Type    string `json:"referenceType"`
+				Locator string `json:"referenceLocator"`
+			} `json:"externalRefs"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal([]byte(spdxOut), &doc); err != nil {
+		t.Fatalf("decode SPDX: %v", err)
+	}
+	for _, pkg := range doc.Packages {
+		if pkg.Name != "demo" || pkg.Version != "1.0.0" {
+			continue
+		}
+		for _, ref := range pkg.ExternalRefs {
+			if ref.Type == "purl" && ref.Locator == "pkg:npm/demo@1.0.0" {
+				return
+			}
+		}
+	}
+	t.Errorf("SPDX output missing demo@1.0.0 with its purl: %s", spdxOut)
 }
 
 func TestCLI_Update(t *testing.T) {
