@@ -9,7 +9,7 @@ require (
 	github.com/git-pkgs/forge v0.11.0
 	github.com/git-pkgs/integrity v0.2.0
 	github.com/git-pkgs/purl v0.2.1
-	github.com/git-pkgs/registries v0.13.2
+	github.com/git-pkgs/registries v0.14.0
 	github.com/git-pkgs/sbom v0.1.9
 	github.com/git-pkgs/sigstore v0.2.1
 	github.com/git-pkgs/spdx v0.3.6
