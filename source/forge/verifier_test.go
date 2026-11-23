@@ -36,6 +36,7 @@ func (f *fakeVerifier) VerifyBundle(_ context.Context, body []byte, alg string, 
 func buildSLSABundle(t *testing.T) []byte {
 	t.Helper()
 	stmt := map[string]any{
+		"_type":         "https://in-toto.io/Statement/v1",
 		"predicateType": "https://slsa.dev/provenance/v1",
 		"predicate": map[string]any{
 			"buildDefinition": map[string]any{
