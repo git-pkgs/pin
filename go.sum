@@ -94,8 +94,8 @@ github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeO
 github.com/felixge/httpsnoop v1.1.0/go.mod h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=
 github.com/git-pkgs/archives v0.11.0 h1:ovCoyIZhbTZB5/GOgJIGB4y4yT0oHo1IvM4LbM4UEM0=
 github.com/git-pkgs/archives v0.11.0/go.mod h1:whtYzdsMLufW+aNoGcGSip/FC0NsiJhaqiZBxSe9AUc=
-github.com/git-pkgs/attestation v0.1.0 h1:aj10Ls05zHWPL7114r0Se8RKC/w8tJgfnzh3dU1mAuM=
-github.com/git-pkgs/attestation v0.1.0/go.mod h1:NSctZpcwmxCiTQ6z3b4X6SCT2N7fQtuPXvizkRgPgBU=
+github.com/git-pkgs/attestation v0.2.0 h1:YPPVCHSVXSNI/bBz2EHQuyga9e+cgY999qoHJmxXna4=
+github.com/git-pkgs/attestation v0.2.0/go.mod h1:OLKWCBUxHILA9iscUfOME7hiHtuJmiUrkP2kCPHSyVs=
 github.com/git-pkgs/cooldown v0.3.1 h1:XDt54+ZuYoJclTLysaQ2GUZPhYYuJdjpaqeLSwjMdto=
 github.com/git-pkgs/cooldown v0.3.1/go.mod h1:FnTg8wufEALATC9Sm/9AHjLdA+u9eVn96e9BqXXjGB0=
 github.com/git-pkgs/forge v0.11.0 h1:Tpp8WXB4Brb9IRfx/BosLCVJJclOJ2CpBBvNdf2FwRs=
