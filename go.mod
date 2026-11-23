@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/git-pkgs/archives v0.11.0
-	github.com/git-pkgs/attestation v0.1.0
+	github.com/git-pkgs/attestation v0.2.0
 	github.com/git-pkgs/cooldown v0.3.1
 	github.com/git-pkgs/forge v0.11.0
 	github.com/git-pkgs/integrity v0.2.0
