@@ -260,10 +260,15 @@ func isPrerelease(version string) bool {
 	return strings.Contains(base, "-")
 }
 
+// fetchPackageDoc streams the full packument. Large packages outgrow the
+// client's buffered response limit (tailwindcss is over 10 MiB), and the
+// abbreviated document drops the time field that min_release_age needs.
 func (s *Source) fetchPackageDoc(ctx context.Context, p *purl.PURL) (*packageDoc, error) {
 	u := strings.TrimRight(s.registryURLFor(p), "/") + "/" + p.FullName()
 	var doc packageDoc
-	if err := s.http.GetJSON(ctx, u, &doc); err != nil {
+	if err := s.http.StreamJSON(ctx, u, func(dec *json.Decoder) error {
+		return dec.Decode(&doc)
+	}); err != nil {
 		return nil, fmt.Errorf("fetch %s package metadata: %w", p.FullName(), err)
 	}
 	return &doc, nil
