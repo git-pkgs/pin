@@ -188,13 +188,20 @@ func (s *Source) fetchMetadataRaw(ctx context.Context, p *purl.PURL) (*npmVersio
 	return &meta, body, nil
 }
 
+// fetchTarball streams the tarball so MaxTarballBytes is the limit that
+// applies, not the client's smaller buffered response limit.
 func (s *Source) fetchTarball(ctx context.Context, tarballURL string) ([]byte, error) {
-	body, err := s.http.GetBody(ctx, tarballURL)
+	var body []byte
+	err := s.http.Stream(ctx, tarballURL, func(r io.Reader) error {
+		var err error
+		body, err = io.ReadAll(io.LimitReader(r, s.opts.MaxTarballBytes+1))
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch tarball %s: %w", tarballURL, err)
 	}
 	if int64(len(body)) > s.opts.MaxTarballBytes {
-		return nil, fmt.Errorf("tarball %s is %d bytes, exceeds cap of %d", tarballURL, len(body), s.opts.MaxTarballBytes)
+		return nil, fmt.Errorf("tarball %s exceeds cap of %d bytes", tarballURL, s.opts.MaxTarballBytes)
 	}
 	return body, nil
 }
